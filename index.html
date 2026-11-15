@@ -3,26 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Friend Showdown - The Gang Brawler</title>
+  <title>Gang Showdown 3D - The Arena Brawler</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥊</text></svg>">
 </head>
 <body>
 
   <div id="gameContainer">
-    <!-- Game Canvas (16:9 1200x675) -->
-    <canvas id="gameCanvas" width="1200" height="675"></canvas>
-
     <!-- Top Floating Toolbar -->
     <div class="top-controls">
       <button id="btnMute" class="control-pill">🔊 SOUND ON</button>
-      <button id="btnHelp" class="control-pill" onclick="alert('🎮 CONTROLS:\n• Move: A / D or ◀ / ▶\n• Jump: W or ▲\n• Crouch: S or ▼\n• Punch: J\n• Kick: K\n• Block: Hold Back or H\n• Super Move: Space or L (when meter is 100%)\n\n📱 Mobile: Use virtual buttons at bottom!')">❓ CONTROLS</button>
+      <button id="btnHelp" class="control-pill" onclick="alert('🎮 FIGHTKARO 3D CONTROLS:\n• Move: A / D or ◀ / ▶\n• Jump: W or ▲\n• Crouch: S or ▼\n• Punch: J (Jab / Cross)\n• Kick: K (High Roundhouse)\n• Uppercut: S + J (Down + Punch)\n• Low Sweep: S + K (Down + Kick)\n• Grab & Throw: I or J+K\n• Block / Guard: Hold Back or H\n• Super Move: Space or L (when meter is 100%)\n\n📱 Mobile: Use virtual buttons on screen!')">❓ CONTROLS</button>
     </div>
 
     <!-- 1. SCREEN: TITLE / START -->
     <div id="screenTitle" class="overlay-screen">
-      <h1 class="arcade-title">FRIEND SHOWDOWN</h1>
-      <p class="subtitle">THE GANG BRAWLER • WHO IS THE REAL BOSS?</p>
+      <h1 class="arcade-title">GANG SHOWDOWN 3D</h1>
+      <p class="subtitle">THE 3D ARENA BRAWLER • WHO IS THE REAL BOSS?</p>
       
       <button id="btnTitleStart" class="btn-arcade" onclick="
         document.getElementById('screenTitle').classList.add('hidden');
@@ -32,7 +29,7 @@
       ">PRESS START</button>
 
       <div class="keyboard-guide">
-        <p>Controls: <kbd>A</kbd>/<kbd>D</kbd> Move • <kbd>W</kbd> Jump • <kbd>J</kbd> Punch • <kbd>K</kbd> Kick • <kbd>Space</kbd> Super</p>
+        <p>Controls: <kbd>A</kbd>/<kbd>D</kbd> Move • <kbd>W</kbd> Jump • <kbd>J</kbd> Punch • <kbd>K</kbd> Kick • <kbd>I</kbd> Grab • <kbd>Space</kbd> Super</p>
       </div>
     </div>
 
@@ -41,17 +38,10 @@
       <div class="select-container">
         <h2 class="arcade-title" style="font-size: 36px; margin: 0;">SELECT YOUR FIGHTER</h2>
 
-        <!-- Character Selection Grid -->
-        <div id="charGrid" class="char-grid">
-          <!-- Filled dynamically by game.js -->
-        </div>
+        <div id="charGrid" class="char-grid"></div>
 
-        <!-- Selected Character Info Card -->
-        <div id="infoP1" class="char-details-box">
-          <!-- Populated by game.js -->
-        </div>
+        <div id="infoP1" class="char-details-box"></div>
 
-        <!-- Options: Mode, Stage & Difficulty -->
         <div class="options-row">
           <div class="option-group">
             <label>Mode:</label>
@@ -70,15 +60,6 @@
             </select>
           </div>
 
-          <div class="option-group">
-            <label>Arena:</label>
-            <select id="selectStage" onchange="window.gameInstance.selectedStage = this.value">
-              <option value="canteen">College Canteen</option>
-              <option value="tapri">Chai Tapri Corner</option>
-              <option value="gaming">999 Ping Gaming Den</option>
-            </select>
-          </div>
-
           <button id="btnFightStart" class="btn-arcade" style="padding: 10px 32px; font-size: 20px;" onclick="window.gameInstance.startFight()">
             FIGHT! 🥊
           </button>
@@ -86,7 +67,47 @@
       </div>
     </div>
 
-    <!-- 3. SCREEN: VICTORY / K.O. -->
+    <!-- 3. IN-GAME 3D HUD OVERLAY -->
+    <div id="gameHUD" class="hidden">
+      <div class="hud-top-bar">
+        <!-- Player 1 Status -->
+        <div class="hud-fighter hud-p1">
+          <div id="hudP1Name" class="hud-name">Player 1</div>
+          <div class="hud-bar-container">
+            <div id="hudP1Lag" class="hud-lag-bar" style="width: 100%;"></div>
+            <div id="hudP1Health" class="hud-health-bar" style="width: 100%;"></div>
+          </div>
+          <div class="hud-super-container">
+            <div id="hudP1Super" class="hud-super-bar" style="width: 0%;"></div>
+          </div>
+          <div id="hudP1SuperText" class="hud-super-text">SUPER: 0%</div>
+        </div>
+
+        <!-- Center Timer -->
+        <div id="hudTimer" class="hud-timer-circle">60</div>
+
+        <!-- Player 2 Status -->
+        <div class="hud-fighter hud-p2" style="align-items: flex-end;">
+          <div id="hudP2Name" class="hud-name">Player 2</div>
+          <div class="hud-bar-container">
+            <div id="hudP2Lag" class="hud-lag-bar" style="width: 100%;"></div>
+            <div id="hudP2Health" class="hud-health-bar" style="width: 100%;"></div>
+          </div>
+          <div class="hud-super-container">
+            <div id="hudP2Super" class="hud-super-bar" style="width: 0%;"></div>
+          </div>
+          <div class="hud-super-text">SUPER 3D</div>
+        </div>
+      </div>
+
+      <!-- Super Move Cinematic Banner -->
+      <div id="superBanner" class="hidden">
+        <div id="superMoveTitle">⚡ SUPER MOVE ⚡</div>
+        <div id="superMoveShout">"BATTLE CRY"</div>
+      </div>
+    </div>
+
+    <!-- 4. SCREEN: VICTORY / K.O. -->
     <div id="screenVictory" class="overlay-screen hidden">
       <div class="victory-box">
         <h2 id="vicWinnerTitle" class="victory-title">PLAYER WINS!</h2>
@@ -103,9 +124,8 @@
       </div>
     </div>
 
-    <!-- 4. MOBILE VIRTUAL GAMEPAD OVERLAY -->
+    <!-- 5. MOBILE VIRTUAL GAMEPAD OVERLAY -->
     <div id="mobileControls" class="hidden">
-      <!-- Movement D-Pad (Left side) -->
       <div class="touch-cluster">
         <button id="btnLeft" class="touch-btn">◀</button>
         <button id="btnRight" class="touch-btn">▶</button>
@@ -113,24 +133,25 @@
         <button id="btnCrouch" class="touch-btn">▼</button>
       </div>
 
-      <!-- Action Buttons (Right side) -->
       <div class="touch-cluster">
         <button id="btnPunch" class="touch-btn">PUNCH</button>
         <button id="btnKick" class="touch-btn">KICK</button>
+        <button id="btnGrab" class="touch-btn">GRAB</button>
         <button id="btnBlock" class="touch-btn">BLOCK</button>
         <button id="btnSuper" class="touch-btn touch-btn-super">SUPER</button>
       </div>
     </div>
   </div>
 
-  <!-- Game Scripts -->
+  <!-- 3D Engine & Scripts -->
+  <script src="js/libs/three.min.js"></script>
   <script src="js/characters.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/engine/particle.js"></script>
   <script src="js/engine/input.js"></script>
+  <script src="js/engine/model3d.js"></script>
+  <script src="js/engine/scene3d.js"></script>
   <script src="js/engine/ai.js"></script>
   <script src="js/engine/fighter.js"></script>
-  <script src="js/engine/renderer.js"></script>
   <script src="js/game.js"></script>
 
 </body>

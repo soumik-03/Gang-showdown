@@ -1,14 +1,13 @@
 /**
  * ===================================================================
- *  INPUT CONTROLLER (Keyboard + Multi-Touch Mobile Virtual Gamepad)
+ *  INPUT CONTROLLER (FightKaro Controls: Desktop & Mobile)
  * ===================================================================
  */
 
 class InputController {
   constructor() {
     this.keys = {};
-    
-    // Player 1 state
+
     this.p1 = {
       left: false,
       right: false,
@@ -16,11 +15,11 @@ class InputController {
       down: false,
       punch: false,
       kick: false,
+      grab: false,
       block: false,
       super: false
     };
 
-    // Player 2 state (for local 2P)
     this.p2 = {
       left: false,
       right: false,
@@ -28,6 +27,7 @@ class InputController {
       down: false,
       punch: false,
       kick: false,
+      grab: false,
       block: false,
       super: false
     };
@@ -39,8 +39,7 @@ class InputController {
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
       this.updateState();
-      
-      // Prevent scrolling on space / arrow keys
+
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
@@ -53,27 +52,29 @@ class InputController {
   }
 
   updateState() {
-    // Player 1 Keyboard mapping: WASD + J (Punch), K (Kick), Space/L (Super)
+    // Player 1: WASD + J (Punch), K (Kick), I (Grab), L / Space (Super)
     this.p1.left = !!(this.keys['KeyA'] || this.keys['ArrowLeft']);
     this.p1.right = !!(this.keys['KeyD'] || this.keys['ArrowRight']);
     this.p1.up = !!(this.keys['KeyW'] || this.keys['ArrowUp']);
     this.p1.down = !!(this.keys['KeyS'] || this.keys['ArrowDown']);
+
     this.p1.punch = !!this.keys['KeyJ'];
     this.p1.kick = !!this.keys['KeyK'];
+    this.p1.grab = !!(this.keys['KeyI'] || (this.keys['KeyJ'] && this.keys['KeyK']));
     this.p1.super = !!(this.keys['KeyL'] || this.keys['Space']);
     this.p1.block = !!this.keys['KeyH'];
 
-    // Player 2 Keyboard mapping (for 2P versus mode on same PC)
+    // Player 2 (Local 2P Keyboard)
     this.p2.left = !!this.keys['Numpad4'];
     this.p2.right = !!this.keys['Numpad6'];
     this.p2.up = !!this.keys['Numpad8'];
     this.p2.down = !!this.keys['Numpad5'];
     this.p2.punch = !!this.keys['Numpad1'];
     this.p2.kick = !!this.keys['Numpad2'];
+    this.p2.grab = !!this.keys['Numpad3'];
     this.p2.super = !!this.keys['Numpad0'];
   }
 
-  // Mobile Touch Bindings
   bindTouchButton(elementId, actionName, player = 'p1') {
     const el = document.getElementById(elementId);
     if (!el) return;
