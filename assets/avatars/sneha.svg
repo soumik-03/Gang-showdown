@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Sneha: Tapri Queen -->
+  <circle cx="50" cy="50" r="45" fill="#f7b731" stroke="#2f3640" stroke-width="4"/>
+  <!-- Hair & Ponytail -->
+  <path d="M 14 38 Q 50 14 86 38 Q 70 20 50 20 Q 30 20 14 38 Z" fill="#2f3542"/>
+  <path d="M 20 30 Q 5 18 0 35 Q 8 45 18 40 Z" fill="#2f3542"/> <!-- Ponytail -->
+  <circle cx="18" cy="36" r="4" fill="#ff6b81"/> <!-- Hairband -->
+  <!-- Cool Sunglasses -->
+  <rect x="26" y="44" width="20" height="15" rx="4" fill="#1e272e" stroke="#ffa502" stroke-width="2"/>
+  <rect x="54" y="44" width="20" height="15" rx="4" fill="#1e272e" stroke="#ffa502" stroke-width="2"/>
+  <line x1="46" y1="50" x2="54" y2="50" stroke="#ffa502" stroke-width="2.5"/>
+  <!-- Sunglasses shine -->
+  <line x1="29" y1="47" x2="36" y2="54" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="57" y1="47" x2="64" y2="54" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Confident Smile -->
+  <path d="M 40 68 Q 50 78 60 68" stroke="#2f3640" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

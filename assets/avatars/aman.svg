@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Aman: Gym Bro with Headband -->
+  <circle cx="50" cy="50" r="45" fill="#f7b731" stroke="#2f3640" stroke-width="4"/>
+  <!-- Buzzcut / Short Hair -->
+  <path d="M 12 36 Q 50 10 88 36 Z" fill="#1e272e"/>
+  <!-- Red Gym Headband -->
+  <path d="M 8 38 Q 50 34 92 38" stroke="#ff4757" stroke-width="10" stroke-linecap="round"/>
+  <!-- Fierce Eyes -->
+  <circle cx="36" cy="52" r="5" fill="#ffffff"/>
+  <circle cx="37" cy="52" r="2.5" fill="#000000"/>
+  <circle cx="64" cy="52" r="5" fill="#ffffff"/>
+  <circle cx="65" cy="52" r="2.5" fill="#000000"/>
+  <!-- Angry workout eyebrows -->
+  <path d="M 28 46 L 44 50" stroke="#1e272e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 72 46 L 56 50" stroke="#1e272e" stroke-width="4" stroke-linecap="round"/>
+  <!-- Gritting Teeth Mouth -->
+  <rect x="38" y="68" width="24" height="8" rx="4" fill="#ffffff" stroke="#2f3640" stroke-width="2.5"/>
+  <line x1="46" y1="68" x2="46" y2="76" stroke="#2f3640" stroke-width="1.5"/>
+  <line x1="54" y1="68" x2="54" y2="76" stroke="#2f3640" stroke-width="1.5"/>
+</svg>

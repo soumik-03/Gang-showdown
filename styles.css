@@ -1,0 +1,423 @@
+/* ===================================================================
+   ARCADE RETRO RETRO-MODERN STYLING (FRIEND SHOWDOWN)
+=================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;700;900&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  background-color: #0b0c10;
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Master Game Container (Maintains 16:9 Aspect Ratio) */
+#gameContainer {
+  position: relative;
+  width: 100vw;
+  max-width: 1200px;
+  aspect-ratio: 16 / 9;
+  max-height: 100vh;
+  background-color: #000000;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+#gameCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Overlays (Title, Select, Victory) */
+.overlay-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(30, 20, 50, 0.94) 0%, rgba(10, 5, 20, 0.98) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Typography & Titles */
+.arcade-title {
+  font-family: 'Bungee', cursive, Impact, sans-serif;
+  font-size: clamp(32px, 6vw, 68px);
+  text-align: center;
+  color: #ffdd59;
+  text-shadow: 
+    4px 4px 0 #eb2f06,
+    8px 8px 0 #000000;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  font-size: clamp(14px, 2vw, 20px);
+  color: #dcdde1;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* Buttons */
+.btn-arcade {
+  background: linear-gradient(180deg, #ff4757 0%, #e84118 100%);
+  color: #ffffff;
+  font-family: 'Bungee', Impact, sans-serif;
+  font-size: clamp(16px, 2.5vw, 26px);
+  padding: 14px 40px;
+  border: 4px solid #ffffff;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #9b200b, 0 10px 20px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  text-transform: uppercase;
+}
+
+.btn-arcade:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 0 #9b200b, 0 14px 25px rgba(255, 71, 87, 0.4);
+}
+
+.btn-arcade:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #9b200b;
+}
+
+.btn-secondary {
+  background: linear-gradient(180deg, #3742fa 0%, #2f3542 100%);
+  font-size: 16px;
+  padding: 10px 24px;
+  box-shadow: 0 4px 0 #1e272e;
+}
+
+/* Top Bar Controls */
+.top-controls {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 20;
+}
+
+.control-pill {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.control-pill:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Character Select Screen */
+.select-container {
+  display: flex;
+  flex-direction: column;
+  width: 90%;
+  max-width: 1000px;
+  height: 85%;
+  justify-content: space-between;
+}
+
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin: 15px 0;
+}
+
+.char-card {
+  background: rgba(47, 53, 66, 0.8);
+  border: 3px solid #747d8c;
+  border-radius: 12px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.char-card:hover {
+  transform: translateY(-5px);
+  border-color: #ffa502;
+  box-shadow: 0 8px 16px rgba(255, 165, 2, 0.3);
+}
+
+.char-card.selected-p1 {
+  border-color: #ff4757;
+  background: rgba(255, 71, 87, 0.25);
+  box-shadow: 0 0 20px #ff4757;
+}
+
+.char-card.selected-p2 {
+  border-color: #3742fa;
+  background: rgba(55, 66, 250, 0.25);
+  box-shadow: 0 0 20px #3742fa;
+}
+
+.char-avatar-preview {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  border: 3px solid #ffffff;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.char-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.char-name {
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.char-nick {
+  font-size: 13px;
+  color: #a4b0be;
+  font-style: italic;
+}
+
+/* Character Info Preview Box */
+.char-details-box {
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #57606f;
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+
+.slot-side {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px dashed #57606f;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slot-side.slot-active {
+  border-style: solid;
+  border-color: #ffdd59;
+  background: rgba(255, 221, 89, 0.1);
+  transform: scale(1.02);
+}
+
+.p1-side .slot-badge {
+  color: #ff4757;
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.p2-side .slot-badge {
+  color: #70a1ff;
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.slot-vs {
+  font-family: 'Bungee', cursive;
+  font-size: 24px;
+  color: #ff4757;
+  text-shadow: 2px 2px #000;
+}
+
+.char-details-box h3 {
+  font-size: 22px;
+  color: #ffdd59;
+}
+
+.char-details-box h3 span {
+  font-size: 16px;
+  color: #ced6e0;
+  font-style: italic;
+}
+
+.char-details-box .tagline {
+  font-size: 14px;
+  color: #a4b0be;
+  margin: 6px 0;
+}
+
+.super-info {
+  background: rgba(255, 71, 87, 0.15);
+  border-left: 4px solid #ff4757;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 0 6px 6px 0;
+}
+
+/* Option Selectors Row */
+.options-row {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.option-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+select {
+  background: #2f3542;
+  color: #ffffff;
+  border: 2px solid #57606f;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Victory Screen */
+.victory-box {
+  background: rgba(0, 0, 0, 0.85);
+  border: 4px solid #f1c40f;
+  border-radius: 16px;
+  padding: 30px 50px;
+  text-align: center;
+  max-width: 600px;
+  box-shadow: 0 0 40px rgba(241, 196, 15, 0.4);
+}
+
+.victory-title {
+  font-family: 'Bungee', cursive;
+  font-size: 38px;
+  color: #f1c40f;
+  margin-bottom: 15px;
+}
+
+.victory-quote {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+
+.victory-roast {
+  font-size: 16px;
+  color: #ff6b81;
+  font-style: italic;
+  margin-bottom: 25px;
+}
+
+.victory-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+/* Mobile Virtual Touch Controls Overlay */
+#mobileControls {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 25px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.touch-cluster {
+  display: flex;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.touch-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(47, 53, 66, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-weight: 900;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.touch-btn.active {
+  background: rgba(255, 71, 87, 0.8);
+  border-color: #ffffff;
+  transform: scale(0.92);
+}
+
+.touch-btn-super {
+  background: linear-gradient(135deg, #e84118 0%, #ff4757 100%);
+  border-color: #f1c40f;
+  color: #fff;
+}
+
+/* Instructions Banner */
+.keyboard-guide {
+  font-size: 13px;
+  color: #a4b0be;
+  margin-top: 20px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.keyboard-guide kbd {
+  background: #57606f;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}

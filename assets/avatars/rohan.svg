@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Rohan: Gamer with Gaming Headset -->
+  <circle cx="50" cy="50" r="45" fill="#fed330" stroke="#2f3640" stroke-width="4"/>
+  <!-- Messy Gamer Hair -->
+  <path d="M 16 36 Q 30 12 50 14 Q 70 12 84 36 Q 50 25 16 36 Z" fill="#2f3542"/>
+  <!-- Gaming Headset Band -->
+  <path d="M 12 50 A 42 42 0 0 1 88 50" fill="none" stroke="#3742fa" stroke-width="8"/>
+  <!-- Headset Earcups -->
+  <rect x="4" y="42" width="12" height="24" rx="6" fill="#57606f" stroke="#3742fa" stroke-width="3"/>
+  <rect x="84" y="42" width="12" height="24" rx="6" fill="#57606f" stroke="#3742fa" stroke-width="3"/>
+  <!-- Headset Mic -->
+  <path d="M 10 60 Q 25 76 40 74" fill="none" stroke="#2f3542" stroke-width="3"/>
+  <circle cx="40" cy="74" r="3.5" fill="#ff4757"/>
+  <!-- Focused Eyes -->
+  <circle cx="36" cy="48" r="5" fill="#ffffff"/>
+  <circle cx="37" cy="48" r="2.5" fill="#000000"/>
+  <circle cx="64" cy="48" r="5" fill="#ffffff"/>
+  <circle cx="65" cy="48" r="2.5" fill="#000000"/>
+  <!-- Mouth -->
+  <path d="M 42 66 Q 50 68 58 66" stroke="#2f3640" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
