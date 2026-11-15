@@ -21,9 +21,9 @@ class GameApp3D {
     this.gameMode = 'cpu';
     this.aiDifficulty = 'medium';
 
-    // Active Fighters
-    this.p1 = null;
-    this.p2 = null;
+    // Active Fighters (Created immediately so they are visible right on the stage!)
+    this.p1 = new Fighter3D(this.scene3D, this.p1Char, -2.8, true);
+    this.p2 = new Fighter3D(this.scene3D, this.p2Char, 2.8, false);
     this.ai = null;
 
     this.matchTime = 60;
@@ -31,7 +31,7 @@ class GameApp3D {
     this.loser = null;
     this.stateTimer = 0;
 
-    // Smooth Health Lag Bars
+    // Smooth Health Lag Bars (Calculated as % of maxHealth)
     this.p1LagHealth = 100;
     this.p2LagHealth = 100;
 
@@ -98,9 +98,17 @@ class GameApp3D {
         this.p2Char = window.CHARACTERS.find(c => c.id !== char.id) || char;
       }
       this.activeSelectSlot = 'p2';
+
+      // Update P1 3D model immediately on stage!
+      if (this.p1) this.p1.destroy();
+      this.p1 = new Fighter3D(this.scene3D, this.p1Char, -2.8, true);
     } else {
       this.p2Char = char;
       this.activeSelectSlot = 'p1';
+
+      // Update P2 3D model immediately on stage!
+      if (this.p2) this.p2.destroy();
+      this.p2 = new Fighter3D(this.scene3D, this.p2Char, 2.8, false);
     }
     this.updateCharacterPreview();
   }
@@ -138,20 +146,18 @@ class GameApp3D {
   }
 
   startFight() {
-    // Hide UI
     document.getElementById('screenTitle').classList.add('hidden');
     document.getElementById('screenSelect').classList.add('hidden');
     document.getElementById('screenVictory').classList.add('hidden');
     document.getElementById('mobileControls').classList.remove('hidden');
     document.getElementById('gameHUD').classList.remove('hidden');
 
-    // Clean up existing 3D fighters
+    // Reset fighters to battle positions with full HP
     if (this.p1) this.p1.destroy();
     if (this.p2) this.p2.destroy();
 
-    // Create 3D Fighters
-    this.p1 = new Fighter3D(this.scene3D, this.p1Char, -3.2, true);
-    this.p2 = new Fighter3D(this.scene3D, this.p2Char, 3.2, false);
+    this.p1 = new Fighter3D(this.scene3D, this.p1Char, -3.5, true);
+    this.p2 = new Fighter3D(this.scene3D, this.p2Char, 3.5, false);
 
     if (this.gameMode === 'cpu') {
       this.ai = new FighterAI(this.p2, this.p1, this.aiDifficulty);
@@ -197,7 +203,7 @@ class GameApp3D {
     this.state = 'KO';
     this.loser = loser;
     this.winner = loser === this.p1 ? this.p2 : this.p1;
-    this.stateTimer = 2.2; // 2.2s slow-mo KO
+    this.stateTimer = 2.2;
   }
 
   showVictoryScreen() {
@@ -219,7 +225,6 @@ class GameApp3D {
 
     if (this.state === 'FIGHT') {
       if (!this.superCinematic.active) {
-        // Match Timer
         this.matchTime -= delta;
         if (this.matchTime <= 0) {
           this.matchTime = 0;
@@ -262,60 +267,63 @@ class GameApp3D {
           this.ai.update(delta);
         }
 
-        // Update Fighters
         this.p1.update(this.p2, delta);
         this.p2.update(this.p1, delta);
 
-        // Update 3D Projectiles & Collision
         this.scene3D.updateProjectiles([this.p1, this.p2]);
       }
 
-      // Update 3D Camera Tracking
       this.scene3D.updateCamera(this.p1.pos, this.p2.pos, this.superCinematic.active);
-
-      // Update HUD
       this.updateHUD();
     } else if (this.state === 'KO') {
       this.stateTimer -= delta;
       if (this.p1 && this.p2) {
-        this.p1.update(this.p2, delta * 0.4); // Slow motion fall
+        this.p1.update(this.p2, delta * 0.4);
         this.p2.update(this.p1, delta * 0.4);
         this.scene3D.updateCamera(this.p1.pos, this.p2.pos, true);
       }
       if (this.stateTimer <= 0) {
         this.showVictoryScreen();
       }
+    } else {
+      // In TITLE or SELECT screens: keep fighters breathing & animated on stage!
+      if (this.p1 && this.p2) {
+        this.p1.update(this.p2, delta);
+        this.p2.update(this.p1, delta);
+        this.scene3D.updateCamera(this.p1.pos, this.p2.pos, false);
+      }
     }
 
-    // Render 3D Scene
     this.scene3D.render();
   }
 
   updateHUD() {
     if (!this.p1 || !this.p2) return;
 
-    // Smooth Lag Bars
-    this.p1LagHealth += (this.p1.health - this.p1LagHealth) * 0.08;
-    this.p2LagHealth += (this.p2.health - this.p2LagHealth) * 0.08;
+    // Calculate Health Percentages
+    const p1Pct = Math.max(0, (this.p1.health / this.p1.maxHealth) * 100);
+    const p2Pct = Math.max(0, (this.p2.health / this.p2.maxHealth) * 100);
 
-    // P1 Health & Lag
-    document.getElementById('hudP1Health').style.width = `${this.p1.health}%`;
+    this.p1LagHealth += (p1Pct - this.p1LagHealth) * 0.08;
+    this.p2LagHealth += (p2Pct - this.p2LagHealth) * 0.08;
+
+    document.getElementById('hudP1Health').style.width = `${p1Pct}%`;
     document.getElementById('hudP1Lag').style.width = `${this.p1LagHealth}%`;
 
-    // P2 Health & Lag
-    document.getElementById('hudP2Health').style.width = `${this.p2.health}%`;
+    document.getElementById('hudP2Health').style.width = `${p2Pct}%`;
     document.getElementById('hudP2Lag').style.width = `${this.p2LagHealth}%`;
 
-    // Super Bars
     document.getElementById('hudP1Super').style.width = `${this.p1.superMeter}%`;
     document.getElementById('hudP2Super').style.width = `${this.p2.superMeter}%`;
 
-    // Timer
     document.getElementById('hudTimer').textContent = Math.ceil(this.matchTime);
 
-    // Super Ready Glow
+    // Super / Rage Status Indicator
     const p1SuperBadge = document.getElementById('hudP1SuperText');
-    if (this.p1.superMeter >= 100) {
+    if (this.p1.rageTriggered && this.p1.superMeter >= 100) {
+      p1SuperBadge.textContent = '🔥 CRITICAL RAGE! PRESS SPACE / L!';
+      p1SuperBadge.classList.add('glow');
+    } else if (this.p1.superMeter >= 100) {
       p1SuperBadge.textContent = '🔥 SUPER READY! (Space / L)';
       p1SuperBadge.classList.add('glow');
     } else {

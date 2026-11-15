@@ -5,7 +5,7 @@
  *  Crafts distinct human-like 3D character models with real anatomical
  *  proportions (jawline, ears, nose, hair, pectorals, deltoids, biceps,
  *  knuckle fists, quads, calves, and sneakers).
- *  Each friend gets their own unique wardrobe & silhouette!
+ *  Includes 3D contact shadows and distinct friend archetypes!
  */
 
 class HumanoidFighter3D {
@@ -22,27 +22,21 @@ class HumanoidFighter3D {
     this.shoesColor = b.shoes || 0xffffff;
     this.hairColor = b.hair || 0x2f3542;
 
-    // Root Group
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // Character-specific anatomical scaling (e.g. Aman the Gym Bro is bulkier)
     this.charId = config.id || 'karan';
     this.setupCharacterArchetype();
 
-    // Joints dictionary for keyframe animation
     this.joints = {};
 
-    // Build the sculpted human body
     this.buildHumanBody();
-
-    // Setup face photo texture slot
+    this.buildContactShadow();
     this.setupFaceTexture();
 
     this.animTime = 0;
   }
 
-  // Set distinct body archetype per friend
   setupCharacterArchetype() {
     this.isBuff = this.charId === 'aman';       // Aman Gym Bro: broader shoulders, bulkier arms
     this.isGamer = this.charId === 'rohan';     // Rohan Gamer: streetwear, headset around neck
@@ -58,6 +52,32 @@ class HumanoidFighter3D {
     });
   }
 
+  // --- REALISTIC CONTACT SHADOW UNDER FEET ---
+  buildContactShadow() {
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = 128;
+    shadowCanvas.height = 128;
+    const sctx = shadowCanvas.getContext('2d');
+    const sGrad = sctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.75)');
+    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.35)');
+    sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    sctx.fillStyle = sGrad;
+    sctx.fillRect(0, 0, 128, 128);
+
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    const shadowGeo = new THREE.PlaneGeometry(2.4, 1.5);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: shadowTexture,
+      transparent: true,
+      depthWrite: false
+    });
+    this.contactShadow = new THREE.Mesh(shadowGeo, shadowMat);
+    this.contactShadow.rotation.x = -Math.PI / 2;
+    this.contactShadow.position.y = 0.02;
+    this.root.add(this.contactShadow);
+  }
+
   buildHumanBody() {
     const skinMat = this.createMat(this.skinColor, 0.62, 0.04);
     const shirtMat = this.createMat(this.shirtColor, 0.7, 0.05);
@@ -67,13 +87,10 @@ class HumanoidFighter3D {
     const hairMat = this.createMat(this.hairColor, 0.85, 0.05);
     const gloveMat = this.createMat(this.config.themeColor || (this.isPlayer1 ? 0xff4757 : 0x3742fa), 0.35, 0.15);
 
-    // Bulk multipliers
     const bulkX = this.isBuff ? 1.25 : 1.0;
     const bulkArm = this.isBuff ? 1.3 : 1.0;
 
-    // =================================================================
     // 1. PELVIS / WAIST
-    // =================================================================
     const pelvisGeo = new THREE.CylinderGeometry(0.52 * bulkX, 0.44 * bulkX, 0.45, 14);
     this.pelvis = new THREE.Mesh(pelvisGeo, pantsMat);
     this.pelvis.position.y = 2.45;
@@ -81,36 +98,31 @@ class HumanoidFighter3D {
     this.root.add(this.pelvis);
     this.joints.pelvis = this.pelvis;
 
-    // Belt / Waistband detail
     const beltGeo = new THREE.CylinderGeometry(0.54 * bulkX, 0.54 * bulkX, 0.1, 14);
     const beltMat = this.createMat(0x1e272e, 0.4, 0.2);
     const belt = new THREE.Mesh(beltGeo, beltMat);
     belt.position.y = 0.18;
     this.pelvis.add(belt);
 
-    // =================================================================
-    // 2. SPINE & TORSO (Human V-Taper, Chest, Shoulders)
-    // =================================================================
+    // 2. SPINE & TORSO (Pectorals, Chest, Waist)
     this.torso = new THREE.Group();
     this.torso.position.y = 0.28;
     this.pelvis.add(this.torso);
     this.joints.torso = this.torso;
 
-    // Abdomen / Lower Torso
     const absGeo = new THREE.CylinderGeometry(0.56 * bulkX, 0.48 * bulkX, 0.55, 14);
     const absMesh = new THREE.Mesh(absGeo, shirtMat);
     absMesh.position.y = 0.28;
     absMesh.castShadow = true;
     this.torso.add(absMesh);
 
-    // Upper Chest (Pectorals / Ribcage V-Taper)
     const chestGeo = new THREE.BoxGeometry(1.28 * bulkX, 0.8, 0.75 * bulkX);
     const chestMesh = new THREE.Mesh(chestGeo, shirtMat);
     chestMesh.position.y = 0.82;
     chestMesh.castShadow = true;
     this.torso.add(chestMesh);
 
-    // Collar detail (Hoodie collar for Karan, Headset for Rohan, Tank straps for Aman)
+    // Character Wardrobe Details
     if (this.isHoodie) {
       const collarGeo = new THREE.TorusGeometry(0.42, 0.1, 8, 16);
       const collarMat = this.createMat(this.shirtColor, 0.7);
@@ -119,7 +131,7 @@ class HumanoidFighter3D {
       collar.position.set(0, 1.2, 0);
       this.torso.add(collar);
     } else if (this.isGamer) {
-      // 3D Gaming Headset resting around Rohan's neck!
+      // 3D Gaming Headset around neck
       const headsetBandGeo = new THREE.TorusGeometry(0.44, 0.08, 8, 20, Math.PI * 1.6);
       const headsetMat = this.createMat(0x3742fa, 0.3, 0.3);
       const band = new THREE.Mesh(headsetBandGeo, headsetMat);
@@ -127,7 +139,6 @@ class HumanoidFighter3D {
       band.position.set(0, 1.15, 0.05);
       this.torso.add(band);
 
-      // Headset earcups
       const earcupGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.14, 10);
       const cupL = new THREE.Mesh(earcupGeo, this.createMat(0x2f3542, 0.4));
       cupL.position.set(-0.46, 1.15, 0.15);
@@ -137,35 +148,31 @@ class HumanoidFighter3D {
       this.torso.add(cupR);
     }
 
-    // =================================================================
-    // 3. NECK & SCULPTED HUMAN HEAD
-    // =================================================================
+    // 3. NECK & SCULPTED HEAD
     this.neck = new THREE.Group();
     this.neck.position.y = 1.25;
     this.torso.add(this.neck);
     this.joints.neck = this.neck;
 
-    // Muscular Neck
     const neckGeo = new THREE.CylinderGeometry(0.22 * bulkX, 0.28 * bulkX, 0.35, 12);
     const neckMesh = new THREE.Mesh(neckGeo, skinMat);
     neckMesh.position.y = 0.18;
     neckMesh.castShadow = true;
     this.neck.add(neckMesh);
 
-    // Head Pivot Group
     this.headGroup = new THREE.Group();
     this.headGroup.position.y = 0.48;
     this.neck.add(this.headGroup);
     this.joints.head = this.headGroup;
 
-    // Sculpted Head Cranium & Jaw
+    // Cranium
     const headCraniumGeo = new THREE.SphereGeometry(0.44, 16, 16);
     this.headMesh = new THREE.Mesh(headCraniumGeo, skinMat);
     this.headMesh.position.y = 0.1;
     this.headMesh.castShadow = true;
     this.headGroup.add(this.headMesh);
 
-    // Jaw / Chin contour
+    // Jawline & Chin
     const jawGeo = new THREE.ConeGeometry(0.36, 0.45, 12);
     const jaw = new THREE.Mesh(jawGeo, skinMat);
     jaw.rotation.x = Math.PI;
@@ -178,7 +185,6 @@ class HumanoidFighter3D {
     earL.scale.set(0.6, 1.2, 0.8);
     earL.position.set(-0.45, 0.05, 0);
     this.headGroup.add(earL);
-
     const earR = earL.clone();
     earR.position.x = 0.45;
     this.headGroup.add(earR);
@@ -203,61 +209,74 @@ class HumanoidFighter3D {
       this.headGroup.add(pupil);
     });
 
-    // 3D Distinct Hairstyles
+    // 3D Eyebrows
+    const browMat = this.createMat(this.hairColor, 0.9);
+    const browGeo = new THREE.BoxGeometry(0.16, 0.04, 0.06);
+    const browL = new THREE.Mesh(browGeo, browMat);
+    browL.position.set(-0.14, 0.23, 0.43);
+    browL.rotation.z = 0.15;
+    this.headGroup.add(browL);
+
+    const browR = new THREE.Mesh(browGeo, browMat);
+    browR.position.set(0.14, 0.23, 0.43);
+    browR.rotation.z = -0.15;
+    this.headGroup.add(browR);
+
+    // 3D Mouth Smirk
+    const mouthGeo = new THREE.BoxGeometry(0.18, 0.04, 0.06);
+    const mouth = new THREE.Mesh(mouthGeo, this.createMat(0x843b35, 0.5));
+    mouth.position.set(0, -0.1, 0.44);
+    this.headGroup.add(mouth);
+
+    // Distinct Hairstyles
     this.buildHairstyle(hairMat);
 
-    // Front Face Cutout Texture Plane (For friend's real photo)
+    // Front Face Cutout Texture Plane
     const faceGeo = new THREE.PlaneGeometry(0.85, 0.85);
     this.faceMat = new THREE.MeshBasicMaterial({
       transparent: true,
-      depthWrite: false
+      alphaTest: 0.1,
+      depthWrite: false,
+      visible: false // Will be set visible once user's photo is loaded
     });
     this.faceMesh = new THREE.Mesh(faceGeo, this.faceMat);
-    this.faceMesh.position.set(0, 0.08, 0.46);
+    this.faceMesh.position.set(0, 0.08, 0.47);
     this.headGroup.add(this.faceMesh);
 
-    // =================================================================
-    // 4. ARMS & SCULPTED HANDS (Deltoids, Biceps, Knuckle Fists)
-    // =================================================================
+    // 4. ARMS & HANDS
     this.buildArm('left', 1, skinMat, shirtMat, gloveMat, bulkArm, bulkX);
     this.buildArm('right', -1, skinMat, shirtMat, gloveMat, bulkArm, bulkX);
 
-    // =================================================================
-    // 5. LEGS & SNEAKERS (Thighs, Knees, Calves, Detailed Shoes)
-    // =================================================================
+    // 5. LEGS & SNEAKERS
     this.buildLeg('left', 1, skinMat, pantsMat, shoeSoleMat, shoeUpperMat, bulkX);
     this.buildLeg('right', -1, skinMat, pantsMat, shoeSoleMat, shoeUpperMat, bulkX);
   }
 
-  // --- DISTINCT 3D HAIRSTYLES ---
   buildHairstyle(hairMat) {
     if (this.isBuff) {
-      // Aman: Buzzcut + Red Headband
+      // Aman: Buzzcut + Headband
       const buzzGeo = new THREE.SphereGeometry(0.46, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
       const buzz = new THREE.Mesh(buzzGeo, hairMat);
       buzz.position.y = 0.14;
       this.headGroup.add(buzz);
 
-      // Red Headband
       const bandGeo = new THREE.TorusGeometry(0.46, 0.08, 8, 20);
       const bandMat = this.createMat(0xff4757, 0.5);
       const band = new THREE.Mesh(bandGeo, bandMat);
       band.position.set(0, 0.22, 0.05);
       this.headGroup.add(band);
     } else if (this.isStylish) {
-      // Sneha: Sleek Ponytail + Sunglasses on Head
+      // Sneha: High Ponytail + Sunglasses
       const hairBase = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
       hairBase.position.y = 0.12;
       this.headGroup.add(hairBase);
 
-      // Ponytail tail sticking out back
       const ponyGeo = new THREE.ConeGeometry(0.18, 0.65, 8);
       const pony = new THREE.Mesh(ponyGeo, hairMat);
       pony.rotation.x = -Math.PI / 3;
       pony.position.set(0, 0.2, -0.5);
       this.headGroup.add(pony);
 
-      // Cool Sunglasses on head
       const glassMat = this.createMat(0x1e272e, 0.1, 0.8);
       const glassL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.08), glassMat);
       glassL.position.set(-0.16, 0.38, 0.35);
@@ -266,12 +285,11 @@ class HumanoidFighter3D {
       glassR.position.x = 0.16;
       this.headGroup.add(glassR);
     } else {
-      // Karan / Rohan: Spiky or Messy Layered Anime / Modern Hair
+      // Karan / Rohan: Layered Spikes
       const hairBase = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
       hairBase.position.y = 0.14;
       this.headGroup.add(hairBase);
 
-      // 3D Hair Strands / Spikes
       const spikeGeo = new THREE.ConeGeometry(0.12, 0.35, 6);
       const spikeAngles = [-0.3, -0.15, 0, 0.15, 0.3];
       spikeAngles.forEach(ang => {
@@ -283,115 +301,96 @@ class HumanoidFighter3D {
     }
   }
 
-  // --- ARMS WITH DELTOIDS, BICEPS & FISTS ---
   buildArm(side, dir, skinMat, shirtMat, gloveMat, bulkArm, bulkX) {
-    // Shoulder Group (Pivot)
     const shoulder = new THREE.Group();
     shoulder.position.set(dir * (0.82 * bulkX), 0.95, 0);
     this.torso.add(shoulder);
     this.joints[side + 'Shoulder'] = shoulder;
 
-    // Muscular Deltoid Cap
-    const deltoidMat = (this.isBuff) ? skinMat : shirtMat; // Tank top shows bare muscular shoulders
+    const deltoidMat = (this.isBuff) ? skinMat : shirtMat;
     const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.25 * bulkArm, 12, 12), deltoidMat);
     shoulder.add(deltoid);
 
-    // Upper Arm / Bicep
     const upperArmGeo = new THREE.CylinderGeometry(0.18 * bulkArm, 0.16 * bulkArm, 0.75, 12);
     const upperArm = new THREE.Mesh(upperArmGeo, skinMat);
     upperArm.position.y = -0.38;
     upperArm.castShadow = true;
     shoulder.add(upperArm);
 
-    // Elbow Pivot
     const elbow = new THREE.Group();
     elbow.position.y = -0.75;
     shoulder.add(elbow);
     this.joints[side + 'Elbow'] = elbow;
 
-    // Forearm with athletic taper
     const forearmGeo = new THREE.CylinderGeometry(0.16 * bulkArm, 0.14 * bulkArm, 0.7, 12);
     const forearm = new THREE.Mesh(forearmGeo, skinMat);
     forearm.position.y = -0.35;
     forearm.castShadow = true;
     elbow.add(forearm);
 
-    // Sculpted Boxing Fist with Knuckles & Thumb
     const fistGroup = new THREE.Group();
     fistGroup.position.y = -0.76;
     elbow.add(fistGroup);
     this.joints[side + 'Hand'] = fistGroup;
 
-    // Glove Palm / Fist block
     const fistGeo = new THREE.BoxGeometry(0.28 * bulkArm, 0.32, 0.32);
     const fistMesh = new THREE.Mesh(fistGeo, gloveMat);
     fistMesh.castShadow = true;
     fistGroup.add(fistMesh);
 
-    // Knuckle ridge
     const knuckleGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.28 * bulkArm, 8);
     const knuckle = new THREE.Mesh(knuckleGeo, gloveMat);
     knuckle.rotation.z = Math.PI / 2;
     knuckle.position.set(0, -0.14, 0.05);
     fistGroup.add(knuckle);
 
-    // Thumb wrap
     const thumbGeo = new THREE.BoxGeometry(0.1, 0.16, 0.12);
     const thumb = new THREE.Mesh(thumbGeo, gloveMat);
     thumb.position.set(dir * 0.15, -0.05, 0.1);
     fistGroup.add(thumb);
   }
 
-  // --- LEGS & REALISTIC SNEAKERS ---
   buildLeg(side, dir, skinMat, pantsMat, shoeSoleMat, shoeUpperMat, bulkX) {
     const hip = new THREE.Group();
     hip.position.set(dir * (0.32 * bulkX), -0.15, 0);
     this.pelvis.add(hip);
     this.joints[side + 'Hip'] = hip;
 
-    // Thigh (Muscular quadriceps)
-    const thighMat = (this.isBuff) ? skinMat : pantsMat; // Gym shorts show bare thighs
+    const thighMat = (this.isBuff) ? skinMat : pantsMat;
     const thighGeo = new THREE.CylinderGeometry(0.26 * bulkX, 0.2 * bulkX, 1.0, 12);
     const thigh = new THREE.Mesh(thighGeo, thighMat);
     thigh.position.y = -0.5;
     thigh.castShadow = true;
     hip.add(thigh);
 
-    // Knee Pivot
     const knee = new THREE.Group();
     knee.position.y = -1.0;
     hip.add(knee);
     this.joints[side + 'Knee'] = knee;
 
-    // Shin & Calf (Anatomical curve)
     const calfGeo = new THREE.CylinderGeometry(0.2 * bulkX, 0.15 * bulkX, 0.95, 12);
     const calf = new THREE.Mesh(calfGeo, pantsMat);
     calf.position.y = -0.48;
     calf.castShadow = true;
     knee.add(calf);
 
-    // Foot / Ankle Pivot
     const foot = new THREE.Group();
     foot.position.y = -0.96;
     knee.add(foot);
     this.joints[side + 'Foot'] = foot;
 
-    // Detailed 3D Sneaker
-    // Sole
     const soleGeo = new THREE.BoxGeometry(0.34, 0.1, 0.72);
     const sole = new THREE.Mesh(soleGeo, shoeSoleMat);
     sole.position.set(0, -0.05, 0.16);
     sole.castShadow = true;
     foot.add(sole);
 
-    // Upper Shoe / Sneaker Body
     const upperGeo = new THREE.BoxGeometry(0.32, 0.22, 0.68);
     const upper = new THREE.Mesh(upperGeo, shoeUpperMat);
     upper.position.set(0, 0.08, 0.14);
     upper.castShadow = true;
     foot.add(upper);
 
-    // Shoe Toe Cap
     const toeGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.32, 8);
     const toe = new THREE.Mesh(toeGeo, shoeUpperMat);
     toe.rotation.z = Math.PI / 2;
@@ -405,8 +404,11 @@ class HumanoidFighter3D {
       loader.load(
         this.config.avatar,
         (texture) => {
-          this.faceMat.map = texture;
-          this.faceMat.needsUpdate = true;
+          if (texture && texture.image && texture.image.width > 0) {
+            this.faceMat.map = texture;
+            this.faceMat.visible = true;
+            this.faceMat.needsUpdate = true;
+          }
         },
         undefined,
         () => {}
@@ -414,7 +416,6 @@ class HumanoidFighter3D {
     }
   }
 
-  // --- SKELETAL ANIMATIONS (FightKaro Athletic Brawling) ---
   updateAnimation(state, facing, delta) {
     this.animTime += delta * 10;
     const j = this.joints;
@@ -430,27 +431,31 @@ class HumanoidFighter3D {
     let rKnee = { x: 0, y: 0, z: 0 };
     let pelvisY = 2.45;
 
-    // Athletic Boxing Idle Stance & Breathing (FightKaro)
+    // Contact shadow scaling with jumps
+    if (this.contactShadow) {
+      const heightAboveGround = Math.max(0, this.root.position.y);
+      const shadowScale = Math.max(0.4, 1.0 - (heightAboveGround * 0.15));
+      this.contactShadow.scale.set(shadowScale, shadowScale, shadowScale);
+    }
+
     if (state === 'idle') {
       const bounce = Math.sin(this.animTime * 0.85) * 0.07;
       pelvisY += bounce;
 
-      torsoRot.y = 0.35; // Angled fighting stance
+      torsoRot.y = 0.35;
       lShoulder.x = -0.55 + bounce;
       lShoulder.z = 0.35;
-      lElbow.x = -1.65; // High left chin guard
+      lElbow.x = -1.65;
 
       rShoulder.x = -0.45 - bounce;
       rShoulder.z = -0.28;
-      rElbow.x = -1.85; // Cocked right cross fist
+      rElbow.x = -1.85;
 
       lHip.x = -0.16;
       rHip.x = 0.16;
       lKnee.x = 0.22;
       rKnee.x = 0.22;
-    }
-    // Walk Forward
-    else if (state === 'walk_fwd') {
+    } else if (state === 'walk_fwd') {
       const step = Math.sin(this.animTime * 1.4);
       pelvisY += Math.abs(step) * 0.05;
 
@@ -463,26 +468,20 @@ class HumanoidFighter3D {
       rShoulder.x = -0.55 + step * 0.3;
       lElbow.x = -1.45;
       rElbow.x = -1.45;
-    }
-    // Walk Backward
-    else if (state === 'walk_back') {
+    } else if (state === 'walk_back') {
       const step = Math.sin(this.animTime * 1.2);
       lHip.x = -step * 0.42;
       rHip.x = step * 0.42;
       lElbow.x = -1.65;
       rElbow.x = -1.65;
-    }
-    // Jump
-    else if (state === 'jump') {
+    } else if (state === 'jump') {
       lHip.x = -0.75;
       rHip.x = -0.55;
       lKnee.x = 1.15;
       rKnee.x = 0.95;
       lShoulder.x = -1.15;
       rShoulder.x = -1.15;
-    }
-    // Crouch
-    else if (state === 'crouch') {
+    } else if (state === 'crouch') {
       pelvisY = 1.62;
       lHip.x = -1.25;
       rHip.x = -1.25;
@@ -490,18 +489,14 @@ class HumanoidFighter3D {
       rKnee.x = 1.85;
       lElbow.x = -2.15;
       rElbow.x = -2.15;
-    }
-    // Light Jab (Punch J)
-    else if (state === 'punch_1' || state === 'jab') {
+    } else if (state === 'punch_1' || state === 'jab') {
       torsoRot.y = 0.52;
       lShoulder.x = -1.58;
       lShoulder.y = 0.18;
       lElbow.x = -0.05;
       rShoulder.x = -0.32;
       rElbow.x = -1.95;
-    }
-    // Heavy Cross (Punch J,J)
-    else if (state === 'punch_2' || state === 'cross') {
+    } else if (state === 'punch_2' || state === 'cross') {
       torsoRot.y = -0.68;
       rShoulder.x = -1.62;
       rShoulder.y = -0.28;
@@ -509,17 +504,13 @@ class HumanoidFighter3D {
       lShoulder.x = -0.25;
       lElbow.x = -1.85;
       pelvisY -= 0.08;
-    }
-    // Uppercut (Down + J)
-    else if (state === 'uppercut') {
+    } else if (state === 'uppercut') {
       pelvisY -= 0.22;
       torsoRot.y = -0.42;
       torsoRot.x = -0.2;
       rShoulder.x = -0.85;
       rElbow.x = -2.35;
-    }
-    // High Roundhouse Kick (Kick K)
-    else if (state === 'kick_1' || state === 'roundhouse') {
+    } else if (state === 'kick_1' || state === 'roundhouse') {
       torsoRot.z = 0.38;
       torsoRot.y = -0.42;
       rHip.x = -1.78;
@@ -528,26 +519,20 @@ class HumanoidFighter3D {
       lHip.x = 0.22;
       lKnee.x = 0.32;
       pelvisY += 0.1;
-    }
-    // Low Sweep Kick (Down + K)
-    else if (state === 'kick_2' || state === 'low_kick') {
+    } else if (state === 'kick_2' || state === 'low_kick') {
       pelvisY = 1.48;
       lHip.x = -1.35;
       lKnee.x = 1.95;
       rHip.x = -1.55;
       rHip.y = 0.52;
       rKnee.x = 0.1;
-    }
-    // Grab & Throw (I or J+K)
-    else if (state === 'grab') {
+    } else if (state === 'grab') {
       torsoRot.x = 0.32;
       lShoulder.x = -1.45;
       rShoulder.x = -1.45;
       lElbow.x = -0.42;
       rElbow.x = -0.42;
-    }
-    // Defensive Block Guard
-    else if (state === 'block') {
+    } else if (state === 'block') {
       lShoulder.x = -1.15;
       rShoulder.x = -1.15;
       lShoulder.z = 0.65;
@@ -555,25 +540,19 @@ class HumanoidFighter3D {
       lElbow.x = -2.35;
       rElbow.x = -2.35;
       pelvisY -= 0.12;
-    }
-    // Hit Flinch
-    else if (state === 'hit') {
+    } else if (state === 'hit') {
       torsoRot.x = -0.48;
       j.head.rotation.x = -0.58;
       lShoulder.x = 0.32;
       rShoulder.x = 0.32;
-    }
-    // Knockdown
-    else if (state === 'knockdown') {
+    } else if (state === 'knockdown') {
       this.root.rotation.z = facing * (Math.PI / 2.2);
       pelvisY = 0.45;
       lHip.x = -0.42;
       rHip.x = -0.42;
       lKnee.x = 0.62;
       rKnee.x = 0.62;
-    }
-    // Super Move Charge
-    else if (state === 'super_charge') {
+    } else if (state === 'super_charge') {
       pelvisY = 1.68;
       torsoRot.x = 0.38;
       lShoulder.x = 0.52;

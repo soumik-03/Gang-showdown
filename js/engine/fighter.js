@@ -11,7 +11,7 @@ class Fighter3D {
     this.name = config.name;
     this.isPlayer1 = isPlayer1;
 
-    // 3D Coordinates (X = left/right on fighting line, Y = height off mat, Z = depth)
+    // 3D Coordinates
     this.pos = { x: startX, y: 0, z: 0 };
     this.vel = { x: 0, y: 0, z: 0 };
 
@@ -20,11 +20,11 @@ class Fighter3D {
     this.jumpForce = 8.5;
     this.gravity = 22.0;
     this.isGrounded = true;
-    this.facing = isPlayer1 ? 1 : -1; // 1 = facing right, -1 = facing left
+    this.facing = isPlayer1 ? 1 : -1;
 
-    // Combat Stats
-    this.maxHealth = 100;
-    this.health = 100;
+    // Combat Stats: Increased HP for epic extended brawls
+    this.maxHealth = 220;
+    this.health = 220;
     this.superMeter = 0; // 0 to 100%
     this.isDead = false;
     this.isBlocking = false;
@@ -32,8 +32,11 @@ class Fighter3D {
     this.comboHits = 0;
     this.comboTimer = 0;
 
+    // Comeback / Rage mechanic flag
+    this.rageTriggered = false;
+
     // State & Animation
-    this.state = 'idle'; // idle, walk_fwd, walk_back, jump, crouch, punch_1, punch_2, uppercut, kick_1, kick_2, grab, hit, knockdown, super_charge
+    this.state = 'idle';
     this.stateTimer = 0;
     this.hasHitOpponent = false;
 
@@ -42,7 +45,7 @@ class Fighter3D {
     this.updateModelTransform();
   }
 
-  // --- CONTROLS & FIGHTKARO MOVES ---
+  // --- CONTROLS ---
 
   moveLeft() {
     if (this.canMove()) {
@@ -89,20 +92,16 @@ class Fighter3D {
     }
   }
 
-  // Punch Moves (FightKaro Jab, Cross, and Down+Punch Uppercut)
   punch() {
     if (!this.canAttack()) return;
 
     if (this.isCrouching) {
-      // Uppercut (Down + J)
       this.state = 'uppercut';
       this.stateTimer = 0.32;
     } else if (this.state === 'punch_1') {
-      // Heavy Cross (J, J Combo)
       this.state = 'punch_2';
       this.stateTimer = 0.35;
     } else {
-      // Fast Jab (J)
       this.state = 'punch_1';
       this.stateTimer = 0.28;
     }
@@ -111,16 +110,13 @@ class Fighter3D {
     if (window.soundEngine) window.soundEngine.playWhoosh();
   }
 
-  // Kick Moves (FightKaro High Roundhouse & Down+Kick Sweep)
   kick() {
     if (!this.canAttack()) return;
 
     if (this.isCrouching) {
-      // Low Sweep (Down + K)
       this.state = 'kick_2';
       this.stateTimer = 0.38;
     } else {
-      // High Roundhouse Kick (K)
       this.state = 'kick_1';
       this.stateTimer = 0.36;
     }
@@ -129,7 +125,6 @@ class Fighter3D {
     if (window.soundEngine) window.soundEngine.playWhoosh();
   }
 
-  // Grab & Throw (I or J+K)
   grab() {
     if (!this.canAttack()) return;
     this.state = 'grab';
@@ -138,17 +133,16 @@ class Fighter3D {
     if (window.soundEngine) window.soundEngine.playWhoosh();
   }
 
-  // Super / Final Move
   triggerSuper() {
     if (this.superMeter < 100 || !this.canAttack() || this.isDead) return;
 
     this.superMeter = 0;
     this.state = 'super_charge';
-    this.stateTimer = 0.85; // Charge windup
+    this.stateTimer = 0.85;
     this.vel.x = 0;
 
     if (window.soundEngine) window.soundEngine.playSuperCharge();
-    if (this.scene3D) this.scene3D.triggerShake(0.5);
+    if (this.scene3D) this.scene3D.triggerShake(0.55);
 
     if (window.gameInstance) {
       window.gameInstance.triggerSuperCinematic(this);
@@ -159,9 +153,9 @@ class Fighter3D {
     const s = this.config.superMove;
     const spawnX = this.pos.x + this.facing * 1.2;
     const spawnY = this.pos.y + 1.4;
+    const damage = 85; // Massive Ultimate attack damage!
 
     if (s.type === 'projectile_swarm') {
-      // Rapid swarm of 3 projectiles
       for (let i = 0; i < 3; i++) {
         setTimeout(() => {
           if (!this.isDead && this.scene3D) {
@@ -169,7 +163,7 @@ class Fighter3D {
               x: spawnX,
               y: spawnY + (i - 1) * 0.3,
               vx: (s.speed || 12) * this.facing,
-              damage: Math.round(s.damage / 3),
+              damage: Math.round(damage / 3),
               owner: this,
               color: 0xff4757
             });
@@ -177,25 +171,22 @@ class Fighter3D {
         }, i * 150);
       }
     } else if (s.type === 'teleport_rush') {
-      // Teleport behind opponent in 3D
       this.pos.x = opponent.pos.x + (opponent.facing === 1 ? -1.8 : 1.8);
       this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
       this.updateModelTransform();
 
-      // Immediate hit
-      opponent.takeDamage(s.damage, this, true);
+      opponent.takeDamage(damage, this, true);
       this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, this.pos.y + 1.4, 0), 0x70a1ff, 35);
-      this.scene3D.triggerShake(0.7);
+      this.scene3D.triggerShake(0.75);
       if (window.soundEngine) window.soundEngine.playSuperHit();
     } else {
-      // Giant Energy Blast (Chai Tsunami / Shaker wave)
       this.scene3D.spawn3DSuperProjectile({
         x: spawnX,
         y: spawnY,
         vx: (s.speed || 11) * this.facing,
-        damage: s.damage,
+        damage: damage,
         owner: this,
-        radius: 0.75,
+        radius: 0.8,
         color: 0xffa502
       });
     }
@@ -214,9 +205,8 @@ class Fighter3D {
     if (this.isDead) return;
 
     if (this.isBlocking && !isSuper) {
-      // Chip damage when blocking
-      this.health = Math.max(0, this.health - (amount * 0.2));
-      this.superMeter = Math.min(100, this.superMeter + 5);
+      this.health = Math.max(0, this.health - (amount * 0.25));
+      this.superMeter = Math.min(100, this.superMeter + 8);
       if (this.scene3D) {
         this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, this.pos.y + 1.4, 0), 0x00d2d3, 10);
       }
@@ -225,15 +215,28 @@ class Fighter3D {
     }
 
     this.health = Math.max(0, this.health - amount);
-    this.state = amount > 25 ? 'knockdown' : 'hit';
-    this.stateTimer = amount > 25 ? 0.6 : 0.28;
-    this.vel.x = -this.facing * (amount > 25 ? 5.5 : 2.5);
+    this.state = amount > 30 ? 'knockdown' : 'hit';
+    this.stateTimer = amount > 30 ? 0.6 : 0.28;
+    this.vel.x = -this.facing * (amount > 30 ? 5.5 : 2.5);
 
-    this.superMeter = Math.min(100, this.superMeter + 10);
+    // Super Meter Gain
+    this.superMeter = Math.min(100, this.superMeter + 16);
     if (attacker) {
       attacker.superMeter = Math.min(100, attacker.superMeter + 14);
       attacker.comboHits++;
       attacker.comboTimer = 75;
+    }
+
+    // BRINK OF HEALTH / RAGE COMEBACK MECHANIC:
+    // When HP drops below 35%, immediately fill Super meter to 100%!
+    if (!this.rageTriggered && this.health <= (this.maxHealth * 0.38) && this.health > 0) {
+      this.rageTriggered = true;
+      this.superMeter = 100; // Instantly ready for the ultimate climax!
+      if (this.scene3D) {
+        this.scene3D.triggerShake(0.5);
+        this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, this.pos.y + 1.2, 0), 0xff3838, 25);
+      }
+      if (window.soundEngine) window.soundEngine.playSuperCharge();
     }
 
     if (this.health <= 0) {
@@ -251,18 +254,14 @@ class Fighter3D {
     if (window.gameInstance) window.gameInstance.onFighterKilled(this);
   }
 
-  // --- UPDATE LOOP ---
   update(opponent, delta) {
-    // Dynamically face opponent unless mid-attack
     if (this.canMove()) {
       this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     }
 
-    // Apply Velocity
     this.pos.x += this.vel.x * delta;
     this.pos.y += this.vel.y * delta;
 
-    // Gravity
     if (!this.isGrounded) {
       this.vel.y -= this.gravity * delta;
       if (this.pos.y <= 0) {
@@ -273,15 +272,13 @@ class Fighter3D {
       }
     }
 
-    // Ring Boundary Limits (-6.8 to 6.8 on mat)
-    this.pos.x = Math.max(-6.8, Math.min(6.8, this.pos.x));
+    // Platform Boundary Limits
+    this.pos.x = Math.max(-9.5, Math.min(9.5, this.pos.x));
 
-    // Friction when grounded
     if (this.isGrounded && !this.state.startsWith('walk')) {
       this.vel.x *= 0.78;
     }
 
-    // Timers
     if (this.stateTimer > 0) {
       this.stateTimer -= delta;
 
@@ -290,7 +287,6 @@ class Fighter3D {
         this.state = 'idle';
       }
 
-      // Check attack hitbox connection
       if (['punch_1', 'punch_2', 'uppercut', 'kick_1', 'kick_2', 'grab'].includes(this.state) && !this.hasHitOpponent) {
         this.checkAttackCollision(opponent);
       }
@@ -300,11 +296,9 @@ class Fighter3D {
       }
     }
 
-    // Update 3D Model Joint Animation
     this.model.updateAnimation(this.state, this.facing, delta);
     this.updateModelTransform();
 
-    // Combo timer
     if (this.comboTimer > 0) {
       this.comboTimer--;
       if (this.comboTimer === 0) this.comboHits = 0;
@@ -319,17 +313,16 @@ class Fighter3D {
     const isGrab = this.state === 'grab';
     const range = isGrab ? 1.6 : (isPunch ? 1.85 : 2.2);
 
-    // Is opponent in front of me and within range?
     const inFront = (this.facing === 1 && opponent.pos.x > this.pos.x) || (this.facing === -1 && opponent.pos.x < this.pos.x);
 
     if (inFront && dist < range && heightDiff < 1.4) {
       this.hasHitOpponent = true;
       let damage = 10;
-      if (this.state === 'punch_2') damage = 15;
-      if (this.state === 'uppercut') damage = 18;
-      if (this.state === 'kick_1') damage = 16;
-      if (this.state === 'kick_2') damage = 14;
-      if (this.state === 'grab') damage = 22;
+      if (this.state === 'punch_2') damage = 16;
+      if (this.state === 'uppercut') damage = 20;
+      if (this.state === 'kick_1') damage = 18;
+      if (this.state === 'kick_2') damage = 15;
+      if (this.state === 'grab') damage = 24;
 
       opponent.takeDamage(damage, this, false);
 
