@@ -1,210 +1,203 @@
 /**
  * ===================================================================
- *  3D ARENA, LIGHTING & DYNAMIC CAMERA ENGINE (Three.js)
+ *  3D ARENA & CINEMATIC FIGHT STAGE (Three.js)
  * ===================================================================
- *  Renders the 3D fighting environment, dynamic shadows, tracking camera,
- *  and 3D particle visual effects.
+ *  Clean, open fighting stage (NO boxing ring, NO ropes).
+ *  Atmospheric lighting, polished floor, shadows, and dynamic camera.
  */
 
 class GameScene3D {
   constructor(container) {
     this.container = container;
 
-    // 1. Scene
+    // 1. Scene with atmospheric fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0c10);
-    this.scene.fog = new THREE.FogExp2(0x0a0c10, 0.022);
+    this.scene.background = new THREE.Color(0x0a0c12);
+    this.scene.fog = new THREE.FogExp2(0x0a0c12, 0.02);
 
-    // 2. Camera (Dynamic 2.5D/3D tracking camera)
+    // 2. Camera (Wide dynamic 3D fighting game camera)
     this.camera = new THREE.PerspectiveCamera(
-      45,
+      42,
       window.innerWidth / window.innerHeight,
       0.1,
-      100
+      120
     );
-    this.camera.position.set(0, 3.8, 12.5);
+    this.camera.position.set(0, 3.2, 13.5);
 
-    // 3. WebGL Renderer with Shadows
+    // 3. WebGL Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
-    // Camera Shake
     this.cameraShake = 0;
 
-    // 4. Setup Lighting
+    // 4. Lighting & Stage
     this.setupLighting();
+    this.buildOpenStage();
 
-    // 5. Build 3D Arena
-    this.buildArena();
-
-    // 6. 3D Particle System
+    // 5. Particles & 3D Projectiles
     this.particles = [];
     this.projectiles3D = [];
 
-    // Window Resize Handler
     window.addEventListener('resize', () => this.onResize());
   }
 
   setupLighting() {
     // Ambient Light
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
     this.scene.add(ambient);
 
-    // Main Overhead Stadium Spotlight (Casts Shadows)
-    this.mainLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-    this.mainLight.position.set(2, 14, 8);
+    // Key Overhead Light (Casts soft human shadows)
+    this.mainLight = new THREE.DirectionalLight(0xfff6e6, 1.4);
+    this.mainLight.position.set(3, 16, 9);
     this.mainLight.castShadow = true;
     this.mainLight.shadow.mapSize.width = 2048;
     this.mainLight.shadow.mapSize.height = 2048;
-    this.mainLight.shadow.camera.near = 0.5;
-    this.mainLight.shadow.camera.far = 30;
-    this.mainLight.shadow.camera.left = -12;
-    this.mainLight.shadow.camera.right = 12;
+    this.mainLight.shadow.camera.near = 1;
+    this.mainLight.shadow.camera.far = 35;
+    this.mainLight.shadow.camera.left = -14;
+    this.mainLight.shadow.camera.right = 14;
     this.mainLight.shadow.camera.top = 10;
-    this.mainLight.shadow.camera.bottom = -5;
-    this.mainLight.shadow.bias = -0.0005;
+    this.mainLight.shadow.camera.bottom = -4;
+    this.mainLight.shadow.bias = -0.0004;
     this.scene.add(this.mainLight);
 
-    // Red Corner Accent Light (Player 1 side)
-    const redCorner = new THREE.PointLight(0xff4757, 1.4, 18);
-    redCorner.position.set(-8, 5, 2);
-    this.scene.add(redCorner);
+    // Rim / Backlight for dramatic character silhouettes
+    const rimLight = new THREE.DirectionalLight(0x70a1ff, 0.8);
+    rimLight.position.set(-5, 8, -8);
+    this.scene.add(rimLight);
 
-    // Blue Corner Accent Light (Player 2 side)
-    const blueCorner = new THREE.PointLight(0x3742fa, 1.4, 18);
-    blueCorner.position.set(8, 5, 2);
-    this.scene.add(blueCorner);
+    // P1 Warm Red Accent Glow
+    this.p1Glow = new THREE.PointLight(0xff4757, 1.2, 22);
+    this.p1Glow.position.set(-10, 4, 3);
+    this.scene.add(this.p1Glow);
+
+    // P2 Electric Blue Accent Glow
+    this.p2Glow = new THREE.PointLight(0x3742fa, 1.2, 22);
+    this.p2Glow.position.set(10, 4, 3);
+    this.scene.add(this.p2Glow);
   }
 
-  buildArena() {
-    // 1. Circular Combat Floor Mat
-    const matGeo = new THREE.CylinderGeometry(8.5, 8.8, 0.5, 36);
-    const matMat = new THREE.MeshStandardMaterial({
-      color: 0x1e272e,
-      roughness: 0.65,
-      metalness: 0.1
-    });
-    this.ringMat = new THREE.Mesh(matGeo, matMat);
-    this.ringMat.position.y = -0.25;
-    this.ringMat.receiveShadow = true;
-    this.scene.add(this.ringMat);
+  // --- OPEN STAGE (NO RINGS, NO ROPES, CLEAN VIEW) ---
+  buildOpenStage() {
+    // 1. Polished Fighting Platform (Wide, sleek stone & asphalt slab)
+    const stageWidth = 26;
+    const stageDepth = 12;
+    const stageThickness = 0.6;
 
-    // Ring Boundary Line
-    const ringLineGeo = new THREE.RingGeometry(7.6, 7.85, 36);
-    const ringLineMat = new THREE.MeshBasicMaterial({
-      color: 0xffa502,
-      side: THREE.DoubleSide
+    const platformGeo = new THREE.BoxGeometry(stageWidth, stageThickness, stageDepth);
+    const platformMat = new THREE.MeshStandardMaterial({
+      color: 0x181d26,
+      roughness: 0.55,
+      metalness: 0.25
     });
-    const ringLine = new THREE.Mesh(ringLineGeo, ringLineMat);
-    ringLine.rotation.x = -Math.PI / 2;
-    ringLine.position.y = 0.01;
-    this.scene.add(ringLine);
+    this.platform = new THREE.Mesh(platformGeo, platformMat);
+    this.platform.position.y = -stageThickness / 2;
+    this.platform.receiveShadow = true;
+    this.scene.add(this.platform);
 
-    // 2. Outer Stadium Floor
-    const groundGeo = new THREE.PlaneGeometry(60, 40);
+    // 2. Stage Edge Neon Accent Lines (Sleek sci-fi / street brawler styling)
+    const edgeFrontGeo = new THREE.BoxGeometry(stageWidth, 0.06, 0.1);
+    const edgeFrontMat = new THREE.MeshBasicMaterial({ color: 0xffa502 });
+    const edgeFront = new THREE.Mesh(edgeFrontGeo, edgeFrontMat);
+    edgeFront.position.set(0, 0.01, stageDepth / 2);
+    this.scene.add(edgeFront);
+
+    const edgeBack = new THREE.Mesh(edgeFrontGeo, new THREE.MeshBasicMaterial({ color: 0x00f2fe }));
+    edgeBack.position.set(0, 0.01, -stageDepth / 2);
+    this.scene.add(edgeBack);
+
+    // 3. Ground Arena Floor Below Stage
+    const groundGeo = new THREE.PlaneGeometry(120, 80);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x0f141d,
-      roughness: 0.9
+      color: 0x080a0f,
+      roughness: 0.95
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.3;
+    ground.position.y = -stageThickness - 0.05;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // 3. Arena Posts & Corner Ropes
-    this.buildRingPosts();
-
-    // 4. Background Stadium Pillars & Neon Grid
-    this.buildBackground();
+    // 4. Background City Skyline & Street Pillars
+    this.buildAtmosphericBackground();
   }
 
-  buildRingPosts() {
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x2f3542, metalness: 0.8, roughness: 0.2 });
-    const postCoords = [
-      [-6.5, -4.5], [6.5, -4.5],
-      [-6.5, 4.5], [6.5, 4.5]
+  buildAtmosphericBackground() {
+    // Distant City Silhouettes / Architecture
+    const bldgMat = new THREE.MeshStandardMaterial({
+      color: 0x0d121c,
+      roughness: 0.9
+    });
+
+    const buildingDefs = [
+      { x: -28, z: -25, w: 10, h: 28, d: 8 },
+      { x: -16, z: -22, w: 8, h: 22, d: 8 },
+      { x: -6, z: -28, w: 12, h: 35, d: 8 },
+      { x: 8, z: -24, w: 9, h: 26, d: 8 },
+      { x: 19, z: -26, w: 11, h: 30, d: 8 },
+      { x: 30, z: -22, w: 8, h: 20, d: 8 }
     ];
 
-    postCoords.forEach(([x, z], idx) => {
-      // Corner post
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 3.2, 12), postMat);
-      post.position.set(x, 1.35, z);
-      post.castShadow = true;
-      this.scene.add(post);
+    buildingDefs.forEach(b => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bldgMat);
+      mesh.position.set(b.x, b.h / 2 - 4, b.z);
+      this.scene.add(mesh);
 
-      // Post top cap
-      const capMat = new THREE.MeshBasicMaterial({ color: idx % 2 === 0 ? 0xff4757 : 0x3742fa });
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), capMat);
-      cap.position.set(x, 2.95, z);
-      this.scene.add(cap);
+      // Random glowing windows
+      if (Math.random() < 0.8) {
+        const winGeo = new THREE.PlaneGeometry(b.w * 0.7, 0.4);
+        const winMat = new THREE.MeshBasicMaterial({ color: 0xfffa65 });
+        const win = new THREE.Mesh(winGeo, winMat);
+        win.position.set(b.x, b.h * 0.6, b.z + b.d / 2 + 0.05);
+        this.scene.add(win);
+      }
     });
 
-    // Ring Ropes (3 Horizontal levels)
-    const ropeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    [0.9, 1.7, 2.5].forEach((h) => {
-      // Front & Back ropes
-      const ropeGeo = new THREE.CylinderGeometry(0.04, 0.04, 13, 8);
-      const ropeFront = new THREE.Mesh(ropeGeo, ropeMat);
-      ropeFront.rotation.z = Math.PI / 2;
-      ropeFront.position.set(0, h, 4.5);
-      this.scene.add(ropeFront);
+    // Street Lamps with warm amber lights
+    [-11, 11].forEach(x => {
+      const poleGeo = new THREE.CylinderGeometry(0.08, 0.1, 7.5, 8);
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x3d4451 });
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(x, 3.75, -5.5);
+      pole.castShadow = true;
+      this.scene.add(pole);
 
-      const ropeBack = new THREE.Mesh(ropeGeo, ropeMat);
-      ropeBack.rotation.z = Math.PI / 2;
-      ropeBack.position.set(0, h, -4.5);
-      this.scene.add(ropeBack);
+      const lampLight = new THREE.PointLight(0xffc048, 1.2, 14);
+      lampLight.position.set(x, 7.5, -5.2);
+      this.scene.add(lampLight);
+
+      const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd32a }));
+      lampHead.position.set(x, 7.5, -5.2);
+      this.scene.add(lampHead);
     });
-  }
-
-  buildBackground() {
-    // 3D Stadium Pillars
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x181e28, roughness: 0.8 });
-    for (let x = -20; x <= 20; x += 8) {
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 16, 1.6), pillarMat);
-      pillar.position.set(x, 6, -12);
-      this.scene.add(pillar);
-    }
-
-    // Glowing Neon Top Header
-    const neonGeo = new THREE.BoxGeometry(28, 0.4, 0.4);
-    const neonMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
-    const neon = new THREE.Mesh(neonGeo, neonMat);
-    neon.position.set(0, 7.5, -11.5);
-    this.scene.add(neon);
   }
 
   // --- DYNAMIC 3D CAMERA TRACKING ---
   updateCamera(p1Pos, p2Pos, isCinematic = false) {
-    // Midpoint between fighters
     const midX = (p1Pos.x + p2Pos.x) / 2;
     const midY = (p1Pos.y + p2Pos.y) / 2;
     const dist = Math.abs(p1Pos.x - p2Pos.x);
 
-    // Desired camera distance (zooms in when close, zooms out when far)
     let targetZ = 8.5 + dist * 0.55;
-    let targetY = 2.8 + (dist * 0.12);
-    let targetX = midX * 0.7;
+    let targetY = 2.8 + dist * 0.1;
+    let targetX = midX * 0.75;
 
-    // Cinematic zoom on Super move
     if (isCinematic) {
       targetZ = 5.2;
-      targetY = 2.2;
-      targetX = p1Pos.x * 0.8;
+      targetY = 2.0;
+      targetX = p1Pos.x * 0.85;
     }
 
-    // Smooth camera lag/lerp
     this.camera.position.x += (targetX - this.camera.position.x) * 0.08;
     this.camera.position.y += (targetY - this.camera.position.y) * 0.08;
     this.camera.position.z += (targetZ - this.camera.position.z) * 0.08;
 
-    // Apply Camera Shake
     if (this.cameraShake > 0.01) {
       this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
       this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
@@ -213,16 +206,15 @@ class GameScene3D {
       this.cameraShake = 0;
     }
 
-    // Look at midpoint
-    this.camera.lookAt(midX, midY + 1.2, 0);
+    this.camera.lookAt(midX, midY + 1.25, 0);
   }
 
   triggerShake(intensity = 0.45) {
     this.cameraShake = Math.max(this.cameraShake, intensity);
   }
 
-  // --- 3D PARTICLES & HIT SPARKS ---
-  spawn3DHitSparks(pos, color = 0xffdd59, count = 18) {
+  // --- 3D PARTICLES ---
+  spawn3DHitSparks(pos, color = 0xffdd59, count = 20) {
     for (let i = 0; i < count; i++) {
       const geo = new THREE.SphereGeometry(0.06 + Math.random() * 0.06, 6, 6);
       const mat = new THREE.MeshBasicMaterial({ color: color });
@@ -230,13 +222,13 @@ class GameScene3D {
       p.position.copy(pos);
 
       const angle = Math.random() * Math.PI * 2;
-      const speed = 3 + Math.random() * 6;
+      const speed = 3.5 + Math.random() * 6.5;
       this.scene.add(p);
 
       this.particles.push({
         mesh: p,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed + 2,
+        vy: Math.sin(angle) * speed + 2.5,
         vz: (Math.random() - 0.5) * 4,
         life: 1.0,
         decay: 0.05 + Math.random() * 0.04
@@ -244,20 +236,16 @@ class GameScene3D {
     }
   }
 
-  // --- 3D SUPER PROJECTILE ---
   spawn3DSuperProjectile(options) {
-    // 3D Glowing Energy Sphere with Sprite Icon
     const group = new THREE.Group();
     group.position.set(options.x, options.y, options.z || 0);
 
-    // Glowing Core Sphere
-    const coreGeo = new THREE.SphereGeometry(options.radius || 0.45, 12, 12);
+    const coreGeo = new THREE.SphereGeometry(options.radius || 0.48, 14, 14);
     const coreMat = new THREE.MeshBasicMaterial({ color: options.color || 0xff4757 });
     const core = new THREE.Mesh(coreGeo, coreMat);
     group.add(core);
 
-    // Point Light Glow
-    const light = new THREE.PointLight(options.color || 0xff4757, 2, 8);
+    const light = new THREE.PointLight(options.color || 0xff4757, 2.5, 9);
     group.add(light);
 
     this.scene.add(group);
@@ -269,18 +257,17 @@ class GameScene3D {
       owner: options.owner,
       color: options.color,
       lifespan: 140,
-      radius: options.radius || 0.45
+      radius: options.radius || 0.48
     });
   }
 
   updateProjectiles(fighters) {
-    // Update Particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.mesh.position.x += p.vx * 0.016;
       p.mesh.position.y += p.vy * 0.016;
       p.mesh.position.z += p.vz * 0.016;
-      p.vy -= 9.8 * 0.016; // Gravity
+      p.vy -= 9.8 * 0.016;
       p.life -= p.decay;
 
       p.mesh.scale.setScalar(Math.max(0.001, p.life));
@@ -293,18 +280,15 @@ class GameScene3D {
       }
     }
 
-    // Update 3D Projectiles
     for (let i = this.projectiles3D.length - 1; i >= 0; i--) {
       const proj = this.projectiles3D[i];
       proj.group.position.x += proj.vx * 0.016;
       proj.lifespan--;
 
-      // Spawn trailing particle
       if (Math.random() < 0.6) {
         this.spawn3DHitSparks(proj.group.position, proj.color, 2);
       }
 
-      // Check collision with target fighter
       fighters.forEach(target => {
         if (target !== proj.owner && !target.isDead) {
           const dx = proj.group.position.x - target.pos.x;
@@ -312,17 +296,16 @@ class GameScene3D {
           const dist = Math.hypot(dx, dy);
 
           if (dist < proj.radius + 0.65) {
-            // Impact!
             target.takeDamage(proj.damage, proj.owner, true);
-            this.spawn3DHitSparks(proj.group.position, proj.color, 30);
-            this.triggerShake(0.6);
+            this.spawn3DHitSparks(proj.group.position, proj.color, 32);
+            this.triggerShake(0.65);
             if (window.soundEngine) window.soundEngine.playSuperHit();
             proj.lifespan = 0;
           }
         }
       });
 
-      if (proj.lifespan <= 0 || Math.abs(proj.group.position.x) > 15) {
+      if (proj.lifespan <= 0 || Math.abs(proj.group.position.x) > 16) {
         this.scene.remove(proj.group);
         this.projectiles3D.splice(i, 1);
       }
