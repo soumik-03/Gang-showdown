@@ -46,14 +46,14 @@ class GameScene3D {
     this.targetCameraPos = new THREE.Vector3(0, 3.2, 13.5);
     this.targetLookAt = new THREE.Vector3(0, 1.8, 0);
 
-    // 4. Lighting & Stage
-    this.setupLighting();
-    this.buildFestiveArena();
-
-    // 5. Particles & 3D Projectiles
+    // 4. Particles, 3D Projectiles & Diyas array (Initialize before building arena!)
     this.particles = [];
     this.projectiles3D = [];
     this.diyas = [];
+
+    // 5. Lighting & Stage
+    this.setupLighting();
+    this.buildFestiveArena();
 
     window.addEventListener('resize', () => this.onResize());
   }

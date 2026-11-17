@@ -43,8 +43,12 @@ class HumanoidFighter3D {
     this.modelGroup = new THREE.Group();
     this.motionGroup.add(this.modelGroup);
 
-    // Joints dictionary for full anatomical articulation
+    // Joints dictionary & mesh parts array (must be initialized before building body!)
     this.joints = {};
+    this.meshParts = [];
+    this.animTime = Math.random() * 10;
+    this.currentFacing = isPlayer1 ? 1 : -1;
+    this.hitFlashTimer = 0;
 
     // Build the 3D Humanoid Body
     this.buildHumanoidBody();
@@ -52,12 +56,6 @@ class HumanoidFighter3D {
     // Aura lighting & Combat VFX
     this.buildAuraLight();
     this.buildCombatVFX();
-
-    // State & Timers
-    this.animTime = Math.random() * 10;
-    this.currentFacing = isPlayer1 ? 1 : -1;
-    this.hitFlashTimer = 0;
-    this.meshParts = [];
   }
 
   // --- MATERIAL HELPER ---
