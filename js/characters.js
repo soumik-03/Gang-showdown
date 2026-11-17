@@ -16,6 +16,7 @@ window.CHARACTERS = [
     tagline: "Every crime scene solved, every combo calculated.",
     avatar: "assets/avatars/detective_head.png",
     fullImage: "assets/avatars/detective.png",
+    modelPath: "assets/models/detective.glb",
     themeColor: "#00d2d3",
     body: {
       type: "detective",
@@ -48,6 +49,7 @@ window.CHARACTERS = [
     tagline: "Master of search algorithms and digital sorcery.",
     avatar: "assets/avatars/wizard_head.png",
     fullImage: "assets/avatars/wizard.png",
+    modelPath: "assets/models/wizard.glb",
     themeColor: "#3742fa",
     body: {
       type: "wizard",
@@ -80,6 +82,7 @@ window.CHARACTERS = [
     tagline: "Never lost in the wild, never misses a roundhouse.",
     avatar: "assets/avatars/explorer_head.png",
     fullImage: "assets/avatars/explorer.png",
+    modelPath: "assets/models/explorer.glb",
     themeColor: "#ffa502",
     body: {
       type: "explorer",
@@ -112,6 +115,7 @@ window.CHARACTERS = [
     tagline: "Forged in tectonic lava, unyielding as obsidian stone.",
     avatar: "assets/avatars/golem_head.png",
     fullImage: "assets/avatars/golem.png",
+    modelPath: "assets/models/golem.glb",
     themeColor: "#ff4757",
     body: {
       type: "golem",

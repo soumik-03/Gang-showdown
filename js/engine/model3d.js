@@ -1,52 +1,136 @@
 /**
  * ===================================================================
- *  GENUINE 3D FIGURE MODELS & SKELETAL RIGGING (Three.js)
+ *  GENUINE 3D FIGURE MODELS & COMBAT ANIMATIONS (Three.js)
  * ===================================================================
- *  Full 3D geometric models for each of the 4 characters:
- *    1. Detective Bot (Trench coat, fedora, robot limbs, magnifying glass)
- *    2. Cyber Mage (Pointed wizard hat, starry robe, white beard, cyber visor, neon staff)
- *    3. Compass Scout (Safari hat, brass compass head & needle, utility vest, boots)
- *    4. Magma Golem (Volcanic rock plates, molten lava seams, key crest shield)
- *  
- *  Full articulated joint animation: arms punch, legs step, knees bend,
- *  heads turn, and weapons swing in real 3D space!
+ *  Loads and animates the 4 authentic 3D character figure models
+ *  extracted from the user's 3D assets:
+ *    1. Detective Bot ("Inspector Clue" - assets/models/detective.glb)
+ *    2. Cyber Mage    ("Chrono Wizard" - assets/models/wizard.glb)
+ *    3. Compass Scout ("The Navigator" - assets/models/explorer.glb)
+ *    4. Magma Golem   ("Pyre Titan"    - assets/models/golem.glb)
+ *
+ *  Features:
+ *    - Real 3D GLTF mesh rendering with cast and receive shadows
+ *    - Dynamic 3D combat kinematics: idle breathing, walks, lunging jabs,
+ *      power crosses, explosive rising uppercuts, 3D spinning roundhouse
+ *      kicks, low sweeps, blocking guards, hit flinches, and knockdowns.
+ *    - Real-time ground contact shadows that track jumps and height
+ *    - Character signature aura point lighting and visual hit VFX
+ *    - Preloading and memory caching for instantaneous switching
+ *    - Seamless procedural fallback while GLB assets stream in
+ * ===================================================================
  */
+
+// Global GLTF Model Cache
+window._gltfSceneCache = window._gltfSceneCache || new Map();
+window._gltfLoaderInstance = window._gltfLoaderInstance || null;
+
+function getGLTFLoader() {
+  if (!window._gltfLoaderInstance && typeof THREE !== 'undefined' && THREE.GLTFLoader) {
+    window._gltfLoaderInstance = new THREE.GLTFLoader();
+  }
+  return window._gltfLoaderInstance;
+}
+
+function loadGLBModel(path, onLoaded) {
+  if (window._gltfSceneCache.has(path)) {
+    const cached = window._gltfSceneCache.get(path);
+    onLoaded(cached.clone(true));
+    return;
+  }
+
+  const loader = getGLTFLoader();
+  if (!loader) {
+    console.warn("THREE.GLTFLoader not ready yet for", path);
+    onLoaded(null);
+    return;
+  }
+
+  loader.load(
+    path,
+    (gltf) => {
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) {
+            child.material.roughness = 0.45;
+            child.material.metalness = 0.2;
+            child.material.side = THREE.DoubleSide;
+          }
+        }
+      });
+      window._gltfSceneCache.set(path, gltf.scene);
+      onLoaded(gltf.scene.clone(true));
+    },
+    undefined,
+    (err) => {
+      console.warn("Could not load GLB at", path, err);
+      onLoaded(null);
+    }
+  );
+}
+
+// Proactively preload all 4 character GLB models
+if (typeof window !== 'undefined') {
+  const PRELOAD_MODELS = [
+    'assets/models/detective.glb',
+    'assets/models/wizard.glb',
+    'assets/models/explorer.glb',
+    'assets/models/golem.glb'
+  ];
+  setTimeout(() => {
+    PRELOAD_MODELS.forEach((p) => loadGLBModel(p, () => {}));
+  }, 100);
+}
 
 class HumanoidFighter3D {
   constructor(scene, config, isPlayer1 = true) {
     this.scene = scene;
-    this.config = config;
+    this.config = config || {};
     this.isPlayer1 = isPlayer1;
     this.charId = config.id || 'detective';
+    this.modelPath = config.modelPath || `assets/models/${this.charId}.glb`;
 
-    // Root Group
+    // Root Group (anchored at fighter position in 3D world space)
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // Dynamic contact shadow under feet
+    // Dynamic ground contact shadow
     this.buildContactShadow();
 
-    // Joints dictionary for keyframe animation
-    this.joints = {};
+    // Motion & Kinematic Transform Group (lerped during animations)
+    this.motionGroup = new THREE.Group();
+    this.root.add(this.motionGroup);
 
-    // Build the specific 3D character figure model
-    this.buildCharacterModel();
+    // Inner Model Group (handles character 3D facing orientation)
+    this.modelGroup = new THREE.Group();
+    this.motionGroup.add(this.modelGroup);
 
-    this.animTime = 0;
+    // Character Signature Aura Lighting
+    this.buildAuraLight();
+
+    // Visual Combat Effects: Block Shield, Attack Flash, Super Aura
+    this.buildCombatVFX();
+
+    // Model State
+    this.glbModel = null;
+    this.proxyMesh = null;
+    this.hitFlashTimer = 0;
+    this.originalMaterials = [];
+
+    // Animation & Kinematics Timers
+    this.animTime = Math.random() * 10;
+    this.currentFacing = isPlayer1 ? 1 : -1;
+
+    // Build procedural fallback first so screen is NEVER blank
+    this.buildProceduralProxy();
+
+    // Asynchronously load & attach the genuine 3D GLB figure model
+    this.loadCharacterGLB();
   }
 
-  // --- HELPER: PBR MATERIALS ---
-  mat(color, roughness = 0.5, metalness = 0.1, emissive = 0x000000, emissiveInt = 0) {
-    return new THREE.MeshStandardMaterial({
-      color: color,
-      roughness: roughness,
-      metalness: metalness,
-      emissive: emissive,
-      emissiveIntensity: emissiveInt
-    });
-  }
-
-  // --- DYNAMIC CONTACT SHADOW ---
+  // --- DYNAMIC CONTACT SHADOW ON FLOOR ---
   buildContactShadow() {
     const shadowCanvas = document.createElement('canvas');
     shadowCanvas.width = 128;
@@ -54,13 +138,13 @@ class HumanoidFighter3D {
     const sctx = shadowCanvas.getContext('2d');
     const sGrad = sctx.createRadialGradient(64, 64, 0, 64, 64, 64);
     sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.45)');
+    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
     sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     sctx.fillStyle = sGrad;
     sctx.fillRect(0, 0, 128, 128);
 
     const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
-    const shadowGeo = new THREE.PlaneGeometry(2.6, 1.6);
+    const shadowGeo = new THREE.PlaneGeometry(2.8, 1.8);
     const shadowMat = new THREE.MeshBasicMaterial({
       map: shadowTexture,
       transparent: true,
@@ -72,782 +156,412 @@ class HumanoidFighter3D {
     this.root.add(this.contactShadow);
   }
 
-  // --- DISPATCH BUILDER ---
-  buildCharacterModel() {
-    if (this.charId === 'detective') {
-      this.buildDetectiveBot();
-    } else if (this.charId === 'wizard') {
-      this.buildCyberWizard();
-    } else if (this.charId === 'explorer') {
-      this.buildCompassExplorer();
-    } else {
-      this.buildMagmaGolem();
-    }
+  // --- CHARACTER SIGNATURE AURA LIGHT ---
+  buildAuraLight() {
+    let auraColor = 0x00d2d3;
+    if (this.charId === 'wizard') auraColor = 0x3742fa;
+    else if (this.charId === 'explorer') auraColor = 0xffa502;
+    else if (this.charId === 'golem') auraColor = 0xff4757;
+
+    this.auraLight = new THREE.PointLight(auraColor, 1.2, 5.5);
+    this.auraLight.position.set(0, 1.6, 0.9);
+    this.motionGroup.add(this.auraLight);
   }
 
-  // ===================================================================
-  // 1. DETECTIVE BOT (Inspector Clue)
-  // ===================================================================
-  buildDetectiveBot() {
-    const tealMat = this.mat(0x388e8e, 0.35, 0.6);        // Robot metal
-    const coatMat = this.mat(0xd7ccc8, 0.8, 0.05);        // Trench coat
-    const fedoraMat = this.mat(0x8d6e63, 0.85, 0.05);     // Brown fedora
-    const bandMat = this.mat(0x3e2723, 0.5, 0.1);         // Hat band
-    const screenMat = this.mat(0x0a1014, 0.2, 0.8, 0x1dd1a1, 1.2); // Glowing LED visor
-    const darkMetal = this.mat(0x2f3640, 0.4, 0.5);
-
-    // Pelvis
-    this.pelvis = new THREE.Group();
-    this.pelvis.position.y = 1.9;
-    this.root.add(this.pelvis);
-    this.joints.pelvis = this.pelvis;
-
-    const lowerPelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.5, 0.4, 14), darkMetal);
-    lowerPelvis.castShadow = true;
-    this.pelvis.add(lowerPelvis);
-
-    // Torso (Trench Coat + Robot Core)
-    this.torso = new THREE.Group();
-    this.torso.position.y = 0.25;
-    this.pelvis.add(this.torso);
-    this.joints.torso = this.torso;
-
-    // Trench coat body
-    const coatMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.65, 0.95, 14), coatMat);
-    coatMesh.position.y = 0.45;
-    coatMesh.castShadow = true;
-    this.torso.add(coatMesh);
-
-    // Trench coat collar lapels
-    const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.55, 0.15), coatMat);
-    lapelL.position.set(-0.35, 0.7, 0.4);
-    lapelL.rotation.z = -0.3;
-    this.torso.add(lapelL);
-
-    const lapelR = lapelL.clone();
-    lapelR.position.x = 0.35;
-    lapelR.rotation.z = 0.3;
-    this.torso.add(lapelR);
-
-    // Belt
-    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.74, 0.74, 0.12, 14), bandMat);
-    belt.position.y = 0.15;
-    this.torso.add(belt);
-
-    // Neck & Head
-    this.neck = new THREE.Group();
-    this.neck.position.y = 0.95;
-    this.torso.add(this.neck);
-    this.joints.neck = this.neck;
-
-    this.headGroup = new THREE.Group();
-    this.headGroup.position.y = 0.42;
-    this.neck.add(this.headGroup);
-    this.joints.head = this.headGroup;
-
-    // Teal Round Robot Head
-    const headSphere = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), tealMat);
-    headSphere.castShadow = true;
-    this.headGroup.add(headSphere);
-
-    // Glowing Curved LED Screen Visor (Smiling eyes)
-    const visorGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.38, 14, 1, false, -Math.PI / 3, (2 * Math.PI) / 3);
-    const visor = new THREE.Mesh(visorGeo, screenMat);
-    visor.position.set(0, 0.05, 0.15);
-    visor.rotation.y = Math.PI / 2;
-    this.headGroup.add(visor);
-
-    // Fedora Hat
-    const fedoraBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.06, 18), fedoraMat);
-    fedoraBrim.position.set(0, 0.48, 0.05);
-    fedoraBrim.rotation.x = -0.08;
-    this.headGroup.add(fedoraBrim);
-
-    const fedoraCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.54, 0.38, 16), fedoraMat);
-    fedoraCrown.position.set(0, 0.68, 0.05);
-    fedoraCrown.rotation.x = -0.08;
-    this.headGroup.add(fedoraCrown);
-
-    const fedoraBand = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 16), bandMat);
-    fedoraBand.position.set(0, 0.54, 0.05);
-    fedoraBand.rotation.x = -0.08;
-    this.headGroup.add(fedoraBand);
-
-    // Arms & Magnifying Glass
-    this.setupStandardArms(coatMat, tealMat, darkMetal, 'detective');
-
-    // Legs & Tread Boots
-    this.setupStandardLegs(darkMetal, darkMetal, darkMetal, 0.55);
-  }
-
-  // ===================================================================
-  // 2. CYBER MAGE (Chrono Wizard)
-  // ===================================================================
-  buildCyberWizard() {
-    const robeMat = this.mat(0x1e3799, 0.6, 0.1);          // Royal blue velvet robe
-    const hatMat = this.mat(0x0c2461, 0.55, 0.1);         // Deep blue hat
-    const beardMat = this.mat(0xf5f6fa, 0.8, 0.0);        // Fluffy white beard
-    const goldMat = this.mat(0xfbc531, 0.3, 0.8);          // Gold stars / buckles
-    const neonCyan = this.mat(0x00d2d3, 0.2, 0.5, 0x00f2fe, 1.4); // Neon data staff glow
-
-    // Pelvis
-    this.pelvis = new THREE.Group();
-    this.pelvis.position.y = 1.85;
-    this.root.add(this.pelvis);
-    this.joints.pelvis = this.pelvis;
-
-    // Torso (Wizard Robe)
-    this.torso = new THREE.Group();
-    this.torso.position.y = 0.25;
-    this.pelvis.add(this.torso);
-    this.joints.torso = this.torso;
-
-    // Robe Bell Shape
-    const robeGeo = new THREE.CylinderGeometry(0.58, 0.85, 1.15, 16);
-    const robeMesh = new THREE.Mesh(robeGeo, robeMat);
-    robeMesh.position.y = 0.45;
-    robeMesh.castShadow = true;
-    this.torso.add(robeMesh);
-
-    // Golden Stars on robe
-    for (let i = 0; i < 6; i++) {
-      const star = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), goldMat);
-      const angle = (i / 6) * Math.PI * 1.5 - 0.75;
-      star.position.set(Math.sin(angle) * 0.72, 0.2 + (i % 3) * 0.3, Math.cos(angle) * 0.72);
-      this.torso.add(star);
-    }
-
-    // Neck & Head
-    this.neck = new THREE.Group();
-    this.neck.position.y = 1.05;
-    this.torso.add(this.neck);
-    this.joints.neck = this.neck;
-
-    this.headGroup = new THREE.Group();
-    this.headGroup.position.y = 0.38;
-    this.neck.add(this.headGroup);
-    this.joints.head = this.headGroup;
-
-    // Head base
-    const headSphere = new THREE.Mesh(new THREE.SphereGeometry(0.48, 14, 14), this.mat(0xf5cd79, 0.7, 0.05));
-    this.headGroup.add(headSphere);
-
-    // Glowing Cyber Visor
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.24, 0.28), neonCyan);
-    visor.position.set(0, 0.12, 0.38);
-    this.headGroup.add(visor);
-
-    // 3D Flowing White Beard
-    const beardGroup = new THREE.Group();
-    beardGroup.position.set(0, -0.1, 0.3);
-    this.headGroup.add(beardGroup);
-
-    // Beard layers (layered soft puffs)
-    const beardMain = new THREE.Mesh(new THREE.ConeGeometry(0.46, 0.9, 12), beardMat);
-    beardMain.rotation.x = 0.25;
-    beardMain.position.set(0, -0.35, 0.12);
-    beardGroup.add(beardMain);
-
-    const mustacheL = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), beardMat);
-    mustacheL.scale.set(1.4, 0.8, 0.8);
-    mustacheL.position.set(-0.18, 0.02, 0.18);
-    beardGroup.add(mustacheL);
-
-    const mustacheR = mustacheL.clone();
-    mustacheR.position.x = 0.18;
-    beardGroup.add(mustacheR);
-
-    // Conical Wizard Hat with Kinked Tip
-    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.06, 18), hatMat);
-    hatBrim.position.set(0, 0.42, 0);
-    this.headGroup.add(hatBrim);
-
-    const hatCone = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.25, 14), hatMat);
-    hatCone.position.set(0, 1.0, -0.1);
-    hatCone.rotation.x = -0.25;
-    this.headGroup.add(hatCone);
-
-    // Star on hat
-    const hatStar = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), goldMat);
-    hatStar.position.set(0, 0.7, 0.4);
-    this.headGroup.add(hatStar);
-
-    // Arms & Magic Staff
-    this.setupStandardArms(robeMat, this.mat(0xf5cd79, 0.7), robeMat, 'wizard');
-
-    // Legs under robe
-    this.setupStandardLegs(robeMat, this.mat(0x3e2723, 0.6), this.mat(0x3e2723, 0.6), 0.5);
-  }
-
-  // ===================================================================
-  // 3. COMPASS SCOUT (The Navigator)
-  // ===================================================================
-  buildCompassExplorer() {
-    const vestMat = this.mat(0xc7a760, 0.75, 0.05);        // Khaki safari vest
-    const hatMat = this.mat(0xd7ccc8, 0.8, 0.05);         // Safari sun hat
-    const brassMat = this.mat(0xd4af37, 0.35, 0.6);       // Brass compass casing
-    const dialMat = this.mat(0xffffff, 0.2, 0.1);          // White compass dial
-    const needleCyan = this.mat(0x00d2d3, 0.2, 0.5, 0x00f2fe, 1.2); // Glowing needle
-    const skinMat = this.mat(0xf5cd79, 0.65, 0.05);
-    const bootMat = this.mat(0x5d4037, 0.6, 0.1);
-
-    // Pelvis
-    this.pelvis = new THREE.Group();
-    this.pelvis.position.y = 1.9;
-    this.root.add(this.pelvis);
-    this.joints.pelvis = this.pelvis;
-
-    const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.5, 0.45, 14), vestMat);
-    shorts.castShadow = true;
-    this.pelvis.add(shorts);
-
-    // Torso (Utility Vest + Canteen + Binoculars)
-    this.torso = new THREE.Group();
-    this.torso.position.y = 0.25;
-    this.pelvis.add(this.torso);
-    this.joints.torso = this.torso;
-
-    const vestMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.62, 0.85, 14), vestMat);
-    vestMesh.position.y = 0.42;
-    vestMesh.castShadow = true;
-    this.torso.add(vestMesh);
-
-    // Pockets on vest
-    const pocketL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.12), this.mat(0xa1887f, 0.8));
-    pocketL.position.set(-0.28, 0.35, 0.36);
-    this.torso.add(pocketL);
-
-    const pocketR = pocketL.clone();
-    pocketR.position.x = 0.28;
-    this.torso.add(pocketR);
-
-    // Green Canteen on belt
-    const canteen = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), this.mat(0x2e7d32, 0.5, 0.2));
-    canteen.position.set(0.65, 0.1, 0);
-    canteen.scale.set(0.7, 1.2, 1);
-    this.torso.add(canteen);
-
-    // Neck & Head (Giant Brass Compass)
-    this.neck = new THREE.Group();
-    this.neck.position.y = 0.88;
-    this.torso.add(this.neck);
-    this.joints.neck = this.neck;
-
-    this.headGroup = new THREE.Group();
-    this.headGroup.position.y = 0.45;
-    this.neck.add(this.headGroup);
-    this.joints.head = this.headGroup;
-
-    // Brass Compass Head Ring
-    const compassCase = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.38, 18), brassMat);
-    compassCase.rotation.x = Math.PI / 2;
-    compassCase.castShadow = true;
-    this.headGroup.add(compassCase);
-
-    // Dial Face
-    const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 18), dialMat);
-    dial.rotation.x = Math.PI / 2;
-    dial.position.z = 0.18;
-    this.headGroup.add(dial);
-
-    // 3D Glowing Compass Needle
-    const needle = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.75, 4), needleCyan);
-    needle.position.set(0, 0, 0.22);
-    needle.rotation.z = -0.5; // Angled needle
-    this.headGroup.add(needle);
-
-    // Cartoon Eyes on compass dial
-    const eyeWhiteMat = this.mat(0xffffff, 0.2);
-    const pupilMat = this.mat(0x1e272e, 0.2);
-    [-0.18, 0.18].forEach(x => {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeWhiteMat);
-      eye.position.set(x, 0.14, 0.22);
-      this.headGroup.add(eye);
-
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), pupilMat);
-      pupil.position.set(x, 0.14, 0.3);
-      this.headGroup.add(pupil);
+  // --- VISUAL COMBAT EFFECTS (SHIELD, FLASH, SUPER AURA) ---
+  buildCombatVFX() {
+    // 1. Block Shield: Hexagonal energy barrier
+    const shieldGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.08, 6);
+    const shieldMat = new THREE.MeshBasicMaterial({
+      color: this.isPlayer1 ? 0x00d2d3 : 0xff4757,
+      transparent: true,
+      opacity: 0.55,
+      wireframe: true
     });
+    this.blockShield = new THREE.Mesh(shieldGeo, shieldMat);
+    this.blockShield.rotation.x = Math.PI / 2;
+    this.blockShield.position.set(0.9, 1.5, 0.1);
+    this.blockShield.visible = false;
+    this.motionGroup.add(this.blockShield);
 
-    // Safari Sun Hat
-    const safariBrim = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.06, 20), hatMat);
-    safariBrim.position.set(0, 0.46, 0);
-    this.headGroup.add(safariBrim);
+    // 2. Attack Hit Flash Spark
+    const sparkGeo = new THREE.RingGeometry(0.15, 0.65, 12);
+    const sparkMat = new THREE.MeshBasicMaterial({
+      color: 0xfff200,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    this.attackSpark = new THREE.Mesh(sparkGeo, sparkMat);
+    this.attackSpark.position.set(1.4, 1.5, 0.1);
+    this.attackSpark.visible = false;
+    this.motionGroup.add(this.attackSpark);
 
-    const safariDome = new THREE.Mesh(new THREE.SphereGeometry(0.58, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), hatMat);
-    safariDome.position.set(0, 0.48, 0);
-    this.headGroup.add(safariDome);
-
-    // Arms & Handheld Compass
-    this.setupStandardArms(vestMat, skinMat, this.mat(0x8d6e63, 0.6), 'explorer');
-
-    // Legs & Hiking Boots
-    this.setupStandardLegs(skinMat, bootMat, bootMat, 0.58);
+    // 3. Super Aura: Orbiting energy torus
+    const superTorusGeo = new THREE.TorusGeometry(1.2, 0.06, 8, 24);
+    const superTorusMat = new THREE.MeshBasicMaterial({
+      color: 0xff3838,
+      transparent: true,
+      opacity: 0.75,
+      wireframe: true
+    });
+    this.superAura = new THREE.Mesh(superTorusGeo, superTorusMat);
+    this.superAura.rotation.x = Math.PI / 2;
+    this.superAura.position.y = 0.2;
+    this.superAura.visible = false;
+    this.motionGroup.add(this.superAura);
   }
 
-  // ===================================================================
-  // 4. MAGMA GOLEM (Pyre Titan)
-  // ===================================================================
-  buildMagmaGolem() {
-    const rockMat = this.mat(0x263238, 0.75, 0.2);          // Obsidian volcanic stone
-    const lavaMat = this.mat(0xff4757, 0.2, 0.3, 0xff6b81, 1.8); // Glowing hot magma
-    const shieldMat = this.mat(0xd63031, 0.4, 0.4);        // Red armored shield
-    const goldMat = this.mat(0xffa502, 0.3, 0.8, 0xffa502, 0.8); // Golden key emblem
+  // --- PROCEDURAL PROXY FIGURE (ACTIVE UNTIL GLB LOADS) ---
+  buildProceduralProxy() {
+    this.proxyMesh = new THREE.Group();
 
-    // Pelvis (Chunky rock block)
-    this.pelvis = new THREE.Group();
-    this.pelvis.position.y = 1.95;
-    this.root.add(this.pelvis);
-    this.joints.pelvis = this.pelvis;
+    let pColor = 0x2e86de;
+    let sColor = 0xdcdde1;
+    if (this.charId === 'wizard') { pColor = 0x1e3799; sColor = 0xffffff; }
+    else if (this.charId === 'explorer') { pColor = 0xe67e22; sColor = 0xc8d6e5; }
+    else if (this.charId === 'golem') { pColor = 0x2f3640; sColor = 0xff4757; }
 
-    const rockPelvis = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.55, 0.8), rockMat);
-    rockPelvis.castShadow = true;
-    this.pelvis.add(rockPelvis);
+    const matP = new THREE.MeshStandardMaterial({ color: pColor, roughness: 0.5, metalness: 0.2 });
+    const matS = new THREE.MeshStandardMaterial({ color: sColor, roughness: 0.6, metalness: 0.1 });
 
-    // Glowing magma joint under hips
-    const magmaHips = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.6), lavaMat);
-    magmaHips.position.y = -0.32;
-    this.pelvis.add(magmaHips);
+    // Torso
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.55, 1.2, 12), matP);
+    torso.position.y = 1.6;
+    torso.castShadow = true;
+    this.proxyMesh.add(torso);
 
-    // Torso (Volcanic Rock Chest + Molten Core)
-    this.torso = new THREE.Group();
-    this.torso.position.y = 0.32;
-    this.pelvis.add(this.torso);
-    this.joints.torso = this.torso;
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 14, 14), matS);
+    head.position.y = 2.5;
+    head.castShadow = true;
+    this.proxyMesh.add(head);
 
-    // Glowing Lava Core Interior
-    const lavaCore = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.7), lavaMat);
-    lavaCore.position.y = 0.45;
-    this.torso.add(lavaCore);
+    // Legs
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 1.0, 8), matP);
+    legL.position.set(-0.35, 0.5, 0);
+    legL.castShadow = true;
+    this.proxyMesh.add(legL);
 
-    // Heavy Rock Chest Slabs (Fragmented over lava)
-    const chestPlateL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.3), rockMat);
-    chestPlateL.position.set(-0.35, 0.48, 0.35);
-    chestPlateL.rotation.y = 0.15;
-    chestPlateL.castShadow = true;
-    this.torso.add(chestPlateL);
+    const legR = legL.clone();
+    legR.position.x = 0.35;
+    this.proxyMesh.add(legR);
 
-    const chestPlateR = chestPlateL.clone();
-    chestPlateR.position.x = 0.35;
-    chestPlateR.rotation.y = -0.15;
-    this.torso.add(chestPlateR);
-
-    // Chest Shield with Key Crest
-    const shieldGeo = new THREE.BoxGeometry(0.65, 0.85, 0.12);
-    const shield = new THREE.Mesh(shieldGeo, shieldMat);
-    shield.position.set(0, 0.45, 0.52);
-    this.torso.add(shield);
-
-    const keyCrest = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.45, 8), goldMat);
-    keyCrest.position.set(0, 0.45, 0.6);
-    this.torso.add(keyCrest);
-
-    // Neck & Head (Faceted Rock Golem Helmet)
-    this.neck = new THREE.Group();
-    this.neck.position.y = 0.95;
-    this.torso.add(this.neck);
-    this.joints.neck = this.neck;
-
-    this.headGroup = new THREE.Group();
-    this.headGroup.position.y = 0.42;
-    this.neck.add(this.headGroup);
-    this.joints.head = this.headGroup;
-
-    // Rock Golem Head
-    const headBlock = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.82, 0.8), rockMat);
-    headBlock.castShadow = true;
-    this.headGroup.add(headBlock);
-
-    // Glowing Magma Eye Visor Slit
-    const eyeSlit = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.25), this.mat(0x00f2fe, 0.1, 0.5, 0x00f2fe, 1.8));
-    eyeSlit.position.set(0, 0.05, 0.38);
-    this.headGroup.add(eyeSlit);
-
-    // Magma Horns
-    const hornL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.32, 0.18), lavaMat);
-    hornL.position.set(-0.42, 0.48, 0.1);
-    this.headGroup.add(hornL);
-
-    const hornR = hornL.clone();
-    hornR.position.x = 0.42;
-    this.headGroup.add(hornR);
-
-    // Arms & Boulder Fists
-    this.setupStandardArms(rockMat, lavaMat, rockMat, 'golem');
-
-    // Legs & Stomper Blocks
-    this.setupStandardLegs(rockMat, lavaMat, rockMat, 0.65);
+    this.modelGroup.add(this.proxyMesh);
   }
 
-  // ===================================================================
-  // UNIVERSAL ARTICULATED 3D LIMBS & WEAPONS
-  // ===================================================================
-  setupStandardArms(shoulderMat, armMat, gloveMat, charType) {
-    // Left Arm
-    const leftArm = this.buildArm(1, shoulderMat, armMat, gloveMat, charType);
-    this.torso.add(leftArm.shoulder);
-    this.joints.leftShoulder = leftArm.shoulder;
-    this.joints.leftElbow = leftArm.elbow;
-    this.joints.leftHand = leftArm.hand;
+  // --- LOAD GENUINE 3D GLB FIGURE MODEL ---
+  loadCharacterGLB() {
+    loadGLBModel(this.modelPath, (clonedScene) => {
+      if (!clonedScene) return;
 
-    // Right Arm (Holds primary weapon)
-    const rightArm = this.buildArm(-1, shoulderMat, armMat, gloveMat, charType);
-    this.torso.add(rightArm.shoulder);
-    this.joints.rightShoulder = rightArm.shoulder;
-    this.joints.rightElbow = rightArm.elbow;
-    this.joints.rightHand = rightArm.hand;
+      // Remove fallback proxy
+      if (this.proxyMesh) {
+        this.modelGroup.remove(this.proxyMesh);
+        this.proxyMesh = null;
+      }
 
-    // Attach Character Signature Weapons to Hands!
-    if (charType === 'detective') {
-      // 3D Magnifying Glass in right hand
-      const magHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), this.mat(0x5d4037, 0.7));
-      magHandle.position.set(0, -0.35, 0.25);
-      magHandle.rotation.x = Math.PI / 3;
-      rightArm.hand.add(magHandle);
+      this.glbModel = clonedScene;
 
-      const magRim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 8, 16), this.mat(0xd4af37, 0.3, 0.8));
-      magRim.position.set(0, -0.15, 0.48);
-      rightArm.hand.add(magRim);
-    } else if (charType === 'wizard') {
-      // 3D Glowing Cyber Staff in right hand
-      const staffRod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), this.mat(0x00d2d3, 0.2, 0.5, 0x00f2fe, 1.2));
-      staffRod.position.set(0, 0.4, 0.2);
-      rightArm.hand.add(staffRod);
+      // Ensure all meshes cast/receive shadows and record materials for hit-flash
+      this.originalMaterials = [];
+      this.glbModel.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) {
+            this.originalMaterials.push({
+              mesh: child,
+              mat: child.material
+            });
+          }
+        }
+      });
 
-      const staffRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 8, 16), this.mat(0x00f2fe, 0.1, 0.9, 0x00f2fe, 1.8));
-      staffRing.position.set(0, 1.6, 0.2);
-      staffRing.rotation.y = Math.PI / 2;
-      rightArm.hand.add(staffRing);
-    } else if (charType === 'explorer') {
-      // Handheld glowing compass in left hand
-      const compGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.08, 14);
-      const compMesh = new THREE.Mesh(compGeo, this.mat(0xd4af37, 0.3, 0.7, 0x00d2d3, 0.6));
-      compMesh.rotation.x = Math.PI / 3;
-      compMesh.position.set(0, -0.2, 0.2);
-      leftArm.hand.add(compMesh);
+      // The GLB is centered on X and Z, feet at Y=0, height ~3.2m
+      this.glbModel.position.set(0, 0, 0);
+      this.modelGroup.add(this.glbModel);
+    });
+  }
+
+  // --- FLASH IMPACT MATERIAL ON DAMAGE ---
+  flashHitMaterial() {
+    this.hitFlashTimer = 0.12;
+    if (this.glbModel) {
+      this.glbModel.traverse((child) => {
+        if (child.isMesh && child.material && child.material.emissive) {
+          child.material.emissive.setHex(0xff3333);
+          child.material.emissiveIntensity = 1.0;
+        }
+      });
+    }
+    if (this.auraLight) {
+      this.auraLight.intensity = 3.0;
     }
   }
 
-  buildArm(dir, shoulderMat, armMat, gloveMat, charType) {
-    const isGolem = charType === 'golem';
-
-    // Shoulder Pivot
-    const shoulder = new THREE.Group();
-    shoulder.position.set(dir * 0.9, 0.72, 0);
-
-    const shoulderMesh = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.48, 0.48, 0.48) : new THREE.SphereGeometry(0.28, 10, 10),
-      shoulderMat
-    );
-    shoulderMesh.castShadow = true;
-    shoulder.add(shoulderMesh);
-
-    // Upper Arm
-    const upperArm = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.32, 0.6, 0.32) : new THREE.CylinderGeometry(0.18, 0.16, 0.65, 10),
-      armMat
-    );
-    upperArm.position.y = -0.35;
-    upperArm.castShadow = true;
-    shoulder.add(upperArm);
-
-    // Elbow Pivot
-    const elbow = new THREE.Group();
-    elbow.position.y = -0.65;
-    shoulder.add(elbow);
-
-    // Forearm
-    const forearm = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.36, 0.6, 0.36) : new THREE.CylinderGeometry(0.17, 0.15, 0.65, 10),
-      armMat
-    );
-    forearm.position.y = -0.32;
-    forearm.castShadow = true;
-    elbow.add(forearm);
-
-    // Fist / Hand
-    const hand = new THREE.Group();
-    hand.position.y = -0.65;
-    elbow.add(hand);
-
-    const fistMesh = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.44, 0.44, 0.44) : new THREE.BoxGeometry(0.3, 0.32, 0.32),
-      gloveMat
-    );
-    fistMesh.castShadow = true;
-    hand.add(fistMesh);
-
-    return { shoulder, elbow, hand };
-  }
-
-  setupStandardLegs(thighMat, shinMat, shoeMat, legRadius = 0.5) {
-    // Left Leg
-    const leftLeg = this.buildLeg(1, thighMat, shinMat, shoeMat, legRadius);
-    this.pelvis.add(leftLeg.hip);
-    this.joints.leftHip = leftLeg.hip;
-    this.joints.leftKnee = leftLeg.knee;
-    this.joints.leftFoot = leftLeg.foot;
-
-    // Right Leg
-    const rightLeg = this.buildLeg(-1, thighMat, shinMat, shoeMat, legRadius);
-    this.pelvis.add(rightLeg.hip);
-    this.joints.rightHip = rightLeg.hip;
-    this.joints.rightKnee = rightLeg.knee;
-    this.joints.rightFoot = rightLeg.foot;
-  }
-
-  buildLeg(dir, thighMat, shinMat, shoeMat, radius) {
-    const isGolem = this.charId === 'golem';
-
-    // Hip Pivot
-    const hip = new THREE.Group();
-    hip.position.set(dir * 0.38, -0.15, 0);
-
-    // Thigh
-    const thigh = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.38, 0.85, 0.38) : new THREE.CylinderGeometry(0.24, 0.2, 0.85, 10),
-      thighMat
-    );
-    thigh.position.y = -0.42;
-    thigh.castShadow = true;
-    hip.add(thigh);
-
-    // Knee Pivot
-    const knee = new THREE.Group();
-    knee.position.y = -0.85;
-    hip.add(knee);
-
-    // Shin / Calf
-    const shin = new THREE.Mesh(
-      isGolem ? new THREE.BoxGeometry(0.36, 0.85, 0.36) : new THREE.CylinderGeometry(0.2, 0.17, 0.85, 10),
-      shinMat
-    );
-    shin.position.y = -0.42;
-    shin.castShadow = true;
-    knee.add(shin);
-
-    // Foot / Shoe Pivot
-    const foot = new THREE.Group();
-    foot.position.y = -0.85;
-    knee.add(foot);
-
-    // 3D Shoe / Stomper Boot
-    const shoe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.34, 0.26, 0.65),
-      shoeMat
-    );
-    shoe.position.set(0, 0.05, 0.14);
-    shoe.castShadow = true;
-    foot.add(shoe);
-
-    return { hip, knee, foot };
+  restoreMaterials() {
+    if (this.glbModel) {
+      this.glbModel.traverse((child) => {
+        if (child.isMesh && child.material && child.material.emissive) {
+          child.material.emissive.setHex(0x000000);
+          child.material.emissiveIntensity = 0.0;
+        }
+      });
+    }
+    if (this.auraLight) {
+      this.auraLight.intensity = 1.2;
+    }
   }
 
   // ===================================================================
-  // ARTICULATED 3D SKELETAL COMBAT ANIMATIONS
+  // 3D COMBAT KINEMATICS & SKELETAL TRANSFORMS
   // ===================================================================
   updateAnimation(state, facing, delta) {
-    this.animTime += delta * 10;
-    const j = this.joints;
+    this.animTime += delta;
+    this.currentFacing = facing;
 
-    let torsoRot = { x: 0, y: 0, z: 0 };
-    let lShoulder = { x: 0, y: 0, z: 0.3 };
-    let rShoulder = { x: 0, y: 0, z: -0.3 };
-    let lElbow = { x: -0.8, y: 0, z: 0 };
-    let rElbow = { x: -0.8, y: 0, z: 0 };
-    let lHip = { x: 0, y: 0, z: 0.05 };
-    let rHip = { x: 0, y: 0, z: -0.05 };
-    let lKnee = { x: 0, y: 0, z: 0 };
-    let rKnee = { x: 0, y: 0, z: 0 };
-    let pelvisY = 1.95;
+    // Hit Flash Recovery
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= delta;
+      if (this.hitFlashTimer <= 0) {
+        this.restoreMaterials();
+      }
+    }
 
-    // Contact shadow scaling with jumps
+    // Dynamic ground contact shadow scaling with jumps
     if (this.contactShadow) {
       const height = Math.max(0, this.root.position.y);
       const scale = Math.max(0.35, 1.0 - (height * 0.18));
       this.contactShadow.scale.set(scale, scale, scale);
+      this.contactShadow.material.opacity = Math.max(0.15, 0.85 - (height * 0.15));
     }
 
-    // 1. Idle Ready Brawler Stance (Athletic breathing bounce & chin guard)
+    // Default VFX States
+    if (this.blockShield) this.blockShield.visible = false;
+    if (this.attackSpark) this.attackSpark.visible = false;
+    if (this.superAura) this.superAura.visible = false;
+
+    // Base 3D facing angle:
+    // In our GLB, front of character faces +Z.
+    // When facing right (+1): rotate toward +X (+90°), angled ~14° toward camera (+Z)
+    // for clear 3D perspective showing chest, face, arms, and depth!
+    // When facing left (-1): rotate toward -X (-90°), angled ~14° toward camera.
+    const baseFacingY = facing === 1 ? (Math.PI / 2 - 0.24) : (-Math.PI / 2 + 0.24);
+
+    let targetPos = { x: 0, y: 0, z: 0 };
+    let targetRot = { x: 0, y: baseFacingY, z: 0 };
+    let targetScale = { x: 1.0, y: 1.0, z: 1.0 };
+    let lerpSpeed = 0.32;
+
+    // -----------------------------------------------------------------
+    // 1. IDLE (Athletic martial arts breathing bounce & ready guard)
+    // -----------------------------------------------------------------
     if (state === 'idle') {
-      const bounce = Math.sin(this.animTime * 0.85) * 0.08;
-      pelvisY += bounce;
-
-      torsoRot.y = 0.38; // Angled fighting stance
-      lShoulder.x = -0.65 + bounce;
-      lShoulder.z = 0.38;
-      lElbow.x = -1.75; // Left guard up protecting chin
-
-      rShoulder.x = -0.55 - bounce;
-      rShoulder.z = -0.32;
-      rElbow.x = -1.85; // Cocked right fist/staff
-
-      lHip.x = -0.18;
-      rHip.x = 0.18;
-      lKnee.x = 0.25;
-      rKnee.x = 0.25;
+      const breath = Math.sin(this.animTime * 4.8);
+      targetPos.y = breath * 0.06;
+      targetRot.z = -0.04 * facing;
+      targetRot.x = 0.04;
+      targetScale.y = 1.0 - breath * 0.02;
+      targetScale.x = 1.0 + breath * 0.015;
     }
-    // 2. Walk Forward (True alternating 3D leg stride & arm pump)
+    // -----------------------------------------------------------------
+    // 2. WALK FORWARD (Deep dynamic strides with athletic forward lean)
+    // -----------------------------------------------------------------
     else if (state === 'walk_fwd') {
-      const step = Math.sin(this.animTime * 1.5);
-      pelvisY += Math.abs(step) * 0.06;
-
-      lHip.x = step * 0.65;
-      rHip.x = -step * 0.65;
-      lKnee.x = Math.max(0, -step * 0.55);
-      rKnee.x = Math.max(0, step * 0.55);
-
-      lShoulder.x = -0.6 - step * 0.45;
-      rShoulder.x = -0.6 + step * 0.45;
-      lElbow.x = -1.35;
-      rElbow.x = -1.35;
+      const stride = Math.sin(this.animTime * 11);
+      targetPos.y = Math.abs(stride) * 0.12;
+      targetRot.z = -0.16 * facing; // Dynamic forward lean into step
+      targetRot.x = Math.sin(this.animTime * 5.5) * 0.06;
+      targetRot.y = baseFacingY + stride * 0.08 * facing;
     }
-    // 3. Walk Backward
+    // -----------------------------------------------------------------
+    // 3. WALK BACKWARD (Cautious defensive brawler retreat)
+    // -----------------------------------------------------------------
     else if (state === 'walk_back') {
-      const step = Math.sin(this.animTime * 1.3);
-      lHip.x = -step * 0.5;
-      rHip.x = step * 0.5;
-      lElbow.x = -1.75;
-      rElbow.x = -1.75;
+      const stride = Math.sin(this.animTime * 8.5);
+      targetPos.y = Math.abs(stride) * 0.08;
+      targetRot.z = 0.12 * facing; // Leaning backward in defensive guard
+      targetRot.y = baseFacingY - stride * 0.06 * facing;
     }
-    // 4. Jump (Knees tucked up, arms raised)
+    // -----------------------------------------------------------------
+    // 4. JUMP (Airborne tuck & stretch)
+    // -----------------------------------------------------------------
     else if (state === 'jump') {
-      lHip.x = -0.85;
-      rHip.x = -0.65;
-      lKnee.x = 1.35;
-      rKnee.x = 1.15;
-      lShoulder.x = -1.25;
-      rShoulder.x = -1.25;
+      targetScale.y = 1.16;
+      targetScale.x = 0.92;
+      targetRot.z = -0.1 * facing;
     }
-    // 5. Crouch (Low defensive duck)
+    // -----------------------------------------------------------------
+    // 5. CROUCH (Low ducking guard)
+    // -----------------------------------------------------------------
     else if (state === 'crouch') {
-      pelvisY = 1.25;
-      lHip.x = -1.35;
-      rHip.x = -1.35;
-      lKnee.x = 1.95;
-      rKnee.x = 1.95;
-      lElbow.x = -2.25;
-      rElbow.x = -2.25;
+      targetPos.y = -0.52;
+      targetScale.y = 0.65;
+      targetScale.x = 1.2;
+      targetScale.z = 1.15;
+      targetRot.z = -0.06 * facing;
     }
-    // 6. Light Jab (Punch J) - Arm snaps straight out forward!
+    // -----------------------------------------------------------------
+    // 6. LIGHT JAB (Punch J - Snap punch thrust!)
+    // -----------------------------------------------------------------
     else if (state === 'punch_1' || state === 'jab') {
-      torsoRot.y = 0.55;
-      lShoulder.x = -1.65; // Extended punch
-      lShoulder.y = 0.18;
-      lElbow.x = -0.05;    // Elbow snaps straight!
-      rShoulder.x = -0.35;
-      rElbow.x = -1.95;
+      targetPos.x = 0.65 * facing; // Body thrusts forward
+      targetPos.y = 0.04;
+      targetRot.z = -0.22 * facing; // Forward punch lunge
+      targetRot.y = baseFacingY + 0.35 * facing; // Torso snap
+      targetScale.x = 1.12;
+      lerpSpeed = 0.55; // Snappy attack frame
+
+      if (this.attackSpark) {
+        this.attackSpark.visible = true;
+        this.attackSpark.position.set(1.4 * facing, 1.8, 0.1);
+        this.attackSpark.rotation.z += 0.3;
+      }
     }
-    // 7. Heavy Cross (Punch J,J) - Deep lunging right power punch!
+    // -----------------------------------------------------------------
+    // 7. HEAVY CROSS (Punch J,J - Deep power punch!)
+    // -----------------------------------------------------------------
     else if (state === 'punch_2' || state === 'cross') {
-      torsoRot.y = -0.75;
-      rShoulder.x = -1.72; // Full right punch extension!
-      rShoulder.y = -0.32;
-      rElbow.x = -0.05;
-      lShoulder.x = -0.28;
-      lElbow.x = -1.85;
-      pelvisY -= 0.1;
+      targetPos.x = 1.15 * facing; // Deep lunging power drive
+      targetPos.y = -0.08;
+      targetRot.z = -0.32 * facing;
+      targetRot.y = baseFacingY - 0.48 * facing; // Full reverse torso torque
+      targetScale.x = 1.18;
+      targetScale.y = 0.95;
+      lerpSpeed = 0.5;
+
+      if (this.attackSpark) {
+        this.attackSpark.visible = true;
+        this.attackSpark.position.set(1.8 * facing, 1.6, 0.1);
+        this.attackSpark.scale.set(1.4, 1.4, 1.4);
+      }
     }
-    // 8. Uppercut (Down + J) - Dips low and explodes upward!
+    // -----------------------------------------------------------------
+    // 8. UPPERCUT (Down + J - Explosive vertical launch!)
+    // -----------------------------------------------------------------
     else if (state === 'uppercut') {
-      pelvisY -= 0.28;
-      torsoRot.y = -0.45;
-      torsoRot.x = -0.25;
-      rShoulder.x = -0.95;
-      rElbow.x = -2.45; // Arm explodes straight upward!
+      targetPos.x = 0.5 * facing;
+      targetPos.y = 0.85; // Rockets straight upward!
+      targetRot.z = 0.35 * facing; // Arched backward as punch rises
+      targetRot.x = -0.2;
+      targetScale.y = 1.35; // Vertical stretch
+      targetScale.x = 0.88;
+      lerpSpeed = 0.48;
+
+      if (this.attackSpark) {
+        this.attackSpark.visible = true;
+        this.attackSpark.position.set(0.9 * facing, 2.5, 0.1);
+      }
     }
-    // 9. High Roundhouse Kick (Kick K) - 3D Leg swings high in arc!
+    // -----------------------------------------------------------------
+    // 9. HIGH ROUNDHOUSE KICK (Kick K - 3D Spinning high arc!)
+    // -----------------------------------------------------------------
     else if (state === 'kick_1' || state === 'roundhouse') {
-      torsoRot.z = 0.45;
-      torsoRot.y = -0.48;
-      rHip.x = -1.88; // Leg high in air!
-      rHip.z = -0.45;
-      rKnee.x = 0.15;
-      lHip.x = 0.28;
-      lKnee.x = 0.38;
-      pelvisY += 0.15;
+      targetPos.x = 0.85 * facing;
+      targetPos.y = 0.32;
+      targetRot.z = -0.55 * facing; // High kick tilt
+      targetRot.y = baseFacingY + 2.2 * facing; // Full 3D spinning rotation!
+      targetScale.x = 1.1;
+      targetScale.y = 1.05;
+      lerpSpeed = 0.45;
+
+      if (this.attackSpark) {
+        this.attackSpark.visible = true;
+        this.attackSpark.position.set(1.6 * facing, 2.1, 0.1);
+      }
     }
-    // 10. Low Sweep Kick (Down + K) - Low spinning sweep!
+    // -----------------------------------------------------------------
+    // 10. LOW SWEEP KICK (Down + K - Spinning floor sweep!)
+    // -----------------------------------------------------------------
     else if (state === 'kick_2' || state === 'low_kick') {
-      pelvisY = 1.15;
-      lHip.x = -1.45;
-      lKnee.x = 2.05;
-      rHip.x = -1.65; // Sweeps low across floor!
-      rHip.y = 0.55;
-      rKnee.x = 0.1;
+      targetPos.x = 0.85 * facing;
+      targetPos.y = -0.55; // Down on the arena floor
+      targetRot.z = 0.48 * facing;
+      targetRot.y = baseFacingY + 3.14 * facing; // Full 360 sweep rotation across floor!
+      targetScale.y = 0.68;
+      targetScale.x = 1.25;
+      lerpSpeed = 0.42;
+
+      if (this.attackSpark) {
+        this.attackSpark.visible = true;
+        this.attackSpark.position.set(1.4 * facing, 0.35, 0.1);
+      }
     }
-    // 11. Grab & Throw (I or J+K) - Both arms clutch forward!
+    // -----------------------------------------------------------------
+    // 11. GRAB & THROW (I or J+K - Clutch & throw!)
+    // -----------------------------------------------------------------
     else if (state === 'grab') {
-      torsoRot.x = 0.35;
-      lShoulder.x = -1.55;
-      rShoulder.x = -1.55;
-      lElbow.x = -0.45;
-      rElbow.x = -0.45;
+      targetPos.x = 0.95 * facing;
+      targetRot.z = -0.35 * facing;
+      targetScale.x = 1.15;
+      lerpSpeed = 0.42;
     }
-    // 12. Defensive Block Guard - Arms crossed tight!
+    // -----------------------------------------------------------------
+    // 12. BLOCK GUARD (H or Back - Braced defense with Energy Shield)
+    // -----------------------------------------------------------------
     else if (state === 'block') {
-      lShoulder.x = -1.25;
-      rShoulder.x = -1.25;
-      lShoulder.z = 0.75;
-      rShoulder.z = -0.75;
-      lElbow.x = -2.45;
-      rElbow.x = -2.45;
-      pelvisY -= 0.15;
+      targetPos.x = -0.22 * facing;
+      targetRot.z = 0.22 * facing; // Braced backward
+      targetScale.x = 0.92;
+      targetScale.y = 0.95;
+
+      if (this.blockShield) {
+        this.blockShield.visible = true;
+        this.blockShield.position.x = 0.85 * facing;
+        this.blockShield.rotation.z += 0.08;
+      }
     }
-    // 13. Hit Flinch - Head and chest snap back!
+    // -----------------------------------------------------------------
+    // 13. HIT REACTION (Impact stagger snapback)
+    // -----------------------------------------------------------------
     else if (state === 'hit') {
-      torsoRot.x = -0.55;
-      if (j.head) j.head.rotation.x = -0.65;
-      lShoulder.x = 0.35;
-      rShoulder.x = 0.35;
+      targetPos.x = -0.55 * facing; // Snaps violently backward
+      targetPos.y = 0.12;
+      targetRot.z = 0.45 * facing;
+      targetRot.x = -0.25;
+      lerpSpeed = 0.65; // Instant impact flinch
+      this.flashHitMaterial();
     }
-    // 14. Knockdown - Whole 3D figure falls backwards to floor!
+    // -----------------------------------------------------------------
+    // 14. KNOCKDOWN (Topples onto arena floor flat on back)
+    // -----------------------------------------------------------------
     else if (state === 'knockdown') {
-      this.root.rotation.z = facing * (Math.PI / 2.15);
-      pelvisY = 0.35;
-      lHip.x = -0.45;
-      rHip.x = -0.45;
-      lKnee.x = 0.65;
-      rKnee.x = 0.65;
+      targetPos.x = -1.1 * facing;
+      targetPos.y = -1.35; // Flat down on the arena floor
+      targetRot.z = facing * (Math.PI / 2.05); // Toppled 90 degrees backward
+      targetRot.y = baseFacingY;
+      lerpSpeed = 0.35;
     }
-    // 15. Super Move Charge - Dramatic charging aura!
+    // -----------------------------------------------------------------
+    // 15. SUPER MOVE CHARGE (Cinematic power levitation & aura)
+    // -----------------------------------------------------------------
     else if (state === 'super_charge') {
-      pelvisY = 1.45;
-      torsoRot.x = 0.42;
-      lShoulder.x = 0.55;
-      rShoulder.x = 0.55;
-      lElbow.x = -1.95;
-      rElbow.x = -1.95;
-      lHip.x = -0.98;
-      rHip.x = -0.98;
-      lKnee.x = 1.55;
-      rKnee.x = 1.55;
+      targetPos.y = 0.45 + Math.sin(this.animTime * 16) * 0.08;
+      targetPos.x = (Math.random() - 0.5) * 0.12; // High-frequency power vibration
+      targetScale.set(1.1, 1.1, 1.1);
+
+      if (this.superAura) {
+        this.superAura.visible = true;
+        this.superAura.rotation.z += 0.15;
+      }
+      if (this.auraLight) {
+        this.auraLight.intensity = 3.5;
+      }
     }
 
-    // Apply Smooth Lerp to all 3D Joints
-    const lerp = 0.32;
-    if (this.pelvis) this.pelvis.position.y += (pelvisY - this.pelvis.position.y) * lerp;
-    this.lerpRot(j.torso, torsoRot, lerp);
-    this.lerpRot(j.leftShoulder, lShoulder, lerp);
-    this.lerpRot(j.rightShoulder, rShoulder, lerp);
-    this.lerpRot(j.leftElbow, lElbow, lerp);
-    this.lerpRot(j.rightElbow, rElbow, lerp);
-    this.lerpRot(j.leftHip, lHip, lerp);
-    this.lerpRot(j.rightHip, rHip, lerp);
-    this.lerpRot(j.leftKnee, lKnee, lerp);
-    this.lerpRot(j.rightKnee, rKnee, lerp);
+    // Apply Smooth Kinematic Lerping to 3D Transform
+    this.motionGroup.position.x += (targetPos.x - this.motionGroup.position.x) * lerpSpeed;
+    this.motionGroup.position.y += (targetPos.y - this.motionGroup.position.y) * lerpSpeed;
+    this.motionGroup.position.z += (targetPos.z - this.motionGroup.position.z) * lerpSpeed;
 
-    if (state !== 'knockdown') {
-      this.root.rotation.z = 0;
-      this.root.rotation.y = facing === 1 ? Math.PI / 2 : -Math.PI / 2;
-    }
-  }
+    this.motionGroup.rotation.x += (targetRot.x - this.motionGroup.rotation.x) * lerpSpeed;
+    this.motionGroup.rotation.y += (targetRot.y - this.motionGroup.rotation.y) * lerpSpeed;
+    this.motionGroup.rotation.z += (targetRot.z - this.motionGroup.rotation.z) * lerpSpeed;
 
-  lerpRot(obj, target, factor) {
-    if (!obj) return;
-    obj.rotation.x += (target.x - obj.rotation.x) * factor;
-    obj.rotation.y += (target.y - obj.rotation.y) * factor;
-    obj.rotation.z += (target.z - obj.rotation.z) * factor;
+    this.motionGroup.scale.x += (targetScale.x - this.motionGroup.scale.x) * lerpSpeed;
+    this.motionGroup.scale.y += (targetScale.y - this.motionGroup.scale.y) * lerpSpeed;
+    this.motionGroup.scale.z += (targetScale.z - this.motionGroup.scale.z) * lerpSpeed;
   }
 
   destroy() {
