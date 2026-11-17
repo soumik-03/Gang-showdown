@@ -1,28 +1,25 @@
 /**
  * ===================================================================
- *  GENUINE 3D FIGURE MODELS & COMBAT ANIMATIONS (Three.js)
+ *  GENUINE 3D FIGURE SKELETAL RIGGING & ARTICULATION (Three.js)
  * ===================================================================
- *  Loads and animates the 4 authentic 3D character figure models
- *  extracted from the user's 3D assets:
- *    1. Detective Bot ("Inspector Clue" - assets/models/detective.glb)
- *    2. Cyber Mage    ("Chrono Wizard" - assets/models/wizard.glb)
- *    3. Compass Scout ("The Navigator" - assets/models/explorer.glb)
- *    4. Magma Golem   ("Pyre Titan"    - assets/models/golem.glb)
+ *  Each of the 4 characters is an authentic, bone-rigged 3D SkinnedMesh:
+ *    - Inspector Clue  (detective.glb)
+ *    - Chrono Wizard   (wizard.glb)
+ *    - The Navigator   (explorer.glb)
+ *    - Pyre Titan      (golem.glb)
  *
- *  Features:
- *    - Real 3D GLTF mesh rendering with cast and receive shadows
- *    - Dynamic 3D combat kinematics: idle breathing, walks, lunging jabs,
- *      power crosses, explosive rising uppercuts, 3D spinning roundhouse
- *      kicks, low sweeps, blocking guards, hit flinches, and knockdowns.
- *    - Real-time ground contact shadows that track jumps and height
- *    - Character signature aura point lighting and visual hit VFX
- *    - Preloading and memory caching for instantaneous switching
- *    - Seamless procedural fallback while GLB assets stream in
+ *  Full 16-Bone Anatomical Articulation:
+ *    - Arms punch, jab, power cross, uppercut, and block!
+ *    - Forearms bend at the elbow to guard and snap forward!
+ *    - Legs step, walk in alternating strides, kick high, and sweep low!
+ *    - Knees bend dynamically during strides, crouches, and kicks!
+ *    - Head snaps back on hit impacts and ducks into guard!
+ *    - Torso & spine twist with punch momentum and martial arts stances!
  * ===================================================================
  */
 
-// Global GLTF Model Cache
-window._gltfSceneCache = window._gltfSceneCache || new Map();
+// Global Model Buffer Cache (for instant instantiations of fresh SkinnedMeshes)
+window._modelBufferCache = window._modelBufferCache || new Map();
 window._gltfLoaderInstance = window._gltfLoaderInstance || null;
 
 function getGLTFLoader() {
@@ -32,56 +29,78 @@ function getGLTFLoader() {
   return window._gltfLoaderInstance;
 }
 
-function loadGLBModel(path, onLoaded) {
-  if (window._gltfSceneCache.has(path)) {
-    const cached = window._gltfSceneCache.get(path);
-    onLoaded(cached.clone(true));
+function fetchModelBuffer(path, callback) {
+  if (window._modelBufferCache.has(path)) {
+    callback(window._modelBufferCache.get(path));
     return;
   }
-
-  const loader = getGLTFLoader();
-  if (!loader) {
-    console.warn("THREE.GLTFLoader not ready yet for", path);
-    onLoaded(null);
-    return;
-  }
-
-  loader.load(
-    path,
-    (gltf) => {
-      gltf.scene.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          if (child.material) {
-            child.material.roughness = 0.45;
-            child.material.metalness = 0.2;
-            child.material.side = THREE.DoubleSide;
-          }
-        }
-      });
-      window._gltfSceneCache.set(path, gltf.scene);
-      onLoaded(gltf.scene.clone(true));
-    },
-    undefined,
-    (err) => {
-      console.warn("Could not load GLB at", path, err);
-      onLoaded(null);
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', path, true);
+  xhr.responseType = 'arraybuffer';
+  xhr.onload = function() {
+    if (xhr.status === 200 || xhr.status === 0) {
+      window._modelBufferCache.set(path, xhr.response);
+      callback(xhr.response);
+    } else {
+      console.warn('Failed to load', path, xhr.status);
+      callback(null);
     }
-  );
+  };
+  xhr.onerror = function() {
+    console.warn('Network error loading', path);
+    callback(null);
+  };
+  xhr.send();
 }
 
-// Proactively preload all 4 character GLB models
+function instantiateRiggedModel(path, onLoaded) {
+  fetchModelBuffer(path, (buffer) => {
+    if (!buffer) {
+      onLoaded(null);
+      return;
+    }
+    const loader = getGLTFLoader();
+    if (!loader) {
+      onLoaded(null);
+      return;
+    }
+    // Fresh slice of ArrayBuffer ensures independent SkinnedMesh and Skeleton
+    loader.parse(
+      buffer.slice(0),
+      '',
+      (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material) {
+              child.material.roughness = 0.45;
+              child.material.metalness = 0.2;
+              child.material.side = THREE.DoubleSide;
+            }
+          }
+        });
+        onLoaded(gltf.scene);
+      },
+      (err) => {
+        console.warn('Error parsing rigged gltf:', err);
+        onLoaded(null);
+      }
+    );
+  });
+}
+
+// Proactive background preloading of all 4 character buffers
 if (typeof window !== 'undefined') {
-  const PRELOAD_MODELS = [
+  const PRELOAD_PATHS = [
     'assets/models/detective.glb',
     'assets/models/wizard.glb',
     'assets/models/explorer.glb',
     'assets/models/golem.glb'
   ];
   setTimeout(() => {
-    PRELOAD_MODELS.forEach((p) => loadGLBModel(p, () => {}));
-  }, 100);
+    PRELOAD_PATHS.forEach((p) => fetchModelBuffer(p, () => {}));
+  }, 50);
 }
 
 class HumanoidFighter3D {
@@ -92,45 +111,45 @@ class HumanoidFighter3D {
     this.charId = config.id || 'detective';
     this.modelPath = config.modelPath || `assets/models/${this.charId}.glb`;
 
-    // Root Group (anchored at fighter position in 3D world space)
+    // Root Group in world space
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // Dynamic ground contact shadow
+    // Floor contact shadow
     this.buildContactShadow();
 
-    // Motion & Kinematic Transform Group (lerped during animations)
+    // Motion group (handles body translations and global lunge/knockdown)
     this.motionGroup = new THREE.Group();
     this.root.add(this.motionGroup);
 
-    // Inner Model Group (handles character 3D facing orientation)
+    // Inner Model group (handles 3D facing orientation towards opponent)
     this.modelGroup = new THREE.Group();
     this.motionGroup.add(this.modelGroup);
 
-    // Character Signature Aura Lighting
+    // Aura lighting & Combat VFX
     this.buildAuraLight();
-
-    // Visual Combat Effects: Block Shield, Attack Flash, Super Aura
     this.buildCombatVFX();
 
-    // Model State
+    // Skeletal bones map (populated once SkinnedMesh is ready)
+    this.bones = {};
+    this.hasSkeleton = false;
+    this.skinnedMesh = null;
     this.glbModel = null;
     this.proxyMesh = null;
     this.hitFlashTimer = 0;
-    this.originalMaterials = [];
 
-    // Animation & Kinematics Timers
+    // Timers & State
     this.animTime = Math.random() * 10;
     this.currentFacing = isPlayer1 ? 1 : -1;
 
-    // Build procedural fallback first so screen is NEVER blank
+    // Build immediate procedural proxy so screen is never blank
     this.buildProceduralProxy();
 
-    // Asynchronously load & attach the genuine 3D GLB figure model
-    this.loadCharacterGLB();
+    // Load and attach genuine rigged 3D character model
+    this.loadRiggedGLB();
   }
 
-  // --- DYNAMIC CONTACT SHADOW ON FLOOR ---
+  // --- FLOOR CONTACT SHADOW ---
   buildContactShadow() {
     const shadowCanvas = document.createElement('canvas');
     shadowCanvas.width = 128;
@@ -156,7 +175,7 @@ class HumanoidFighter3D {
     this.root.add(this.contactShadow);
   }
 
-  // --- CHARACTER SIGNATURE AURA LIGHT ---
+  // --- SIGNATURE AURA POINT LIGHT ---
   buildAuraLight() {
     let auraColor = 0x00d2d3;
     if (this.charId === 'wizard') auraColor = 0x3742fa;
@@ -168,7 +187,7 @@ class HumanoidFighter3D {
     this.motionGroup.add(this.auraLight);
   }
 
-  // --- VISUAL COMBAT EFFECTS (SHIELD, FLASH, SUPER AURA) ---
+  // --- COMBAT VFX ---
   buildCombatVFX() {
     // 1. Block Shield: Hexagonal energy barrier
     const shieldGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.08, 6);
@@ -197,7 +216,7 @@ class HumanoidFighter3D {
     this.attackSpark.visible = false;
     this.motionGroup.add(this.attackSpark);
 
-    // 3. Super Aura: Orbiting energy torus
+    // 3. Super Aura
     const superTorusGeo = new THREE.TorusGeometry(1.2, 0.06, 8, 24);
     const superTorusMat = new THREE.MeshBasicMaterial({
       color: 0xff3838,
@@ -212,10 +231,9 @@ class HumanoidFighter3D {
     this.motionGroup.add(this.superAura);
   }
 
-  // --- PROCEDURAL PROXY FIGURE (ACTIVE UNTIL GLB LOADS) ---
+  // --- IMMEDIATE PROCEDURAL PROXY ---
   buildProceduralProxy() {
     this.proxyMesh = new THREE.Group();
-
     let pColor = 0x2e86de;
     let sColor = 0xdcdde1;
     if (this.charId === 'wizard') { pColor = 0x1e3799; sColor = 0xffffff; }
@@ -225,19 +243,16 @@ class HumanoidFighter3D {
     const matP = new THREE.MeshStandardMaterial({ color: pColor, roughness: 0.5, metalness: 0.2 });
     const matS = new THREE.MeshStandardMaterial({ color: sColor, roughness: 0.6, metalness: 0.1 });
 
-    // Torso
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.55, 1.2, 12), matP);
     torso.position.y = 1.6;
     torso.castShadow = true;
     this.proxyMesh.add(torso);
 
-    // Head
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 14, 14), matS);
     head.position.y = 2.5;
     head.castShadow = true;
     this.proxyMesh.add(head);
 
-    // Legs
     const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 1.0, 8), matP);
     legL.position.set(-0.35, 0.5, 0);
     legL.castShadow = true;
@@ -250,78 +265,60 @@ class HumanoidFighter3D {
     this.modelGroup.add(this.proxyMesh);
   }
 
-  // --- LOAD GENUINE 3D GLB FIGURE MODEL ---
-  loadCharacterGLB() {
-    loadGLBModel(this.modelPath, (clonedScene) => {
-      if (!clonedScene) return;
+  // --- LOAD AND ATTACH RIGGED 3D CHARACTER MODEL ---
+  loadRiggedGLB() {
+    instantiateRiggedModel(this.modelPath, (scene) => {
+      if (!scene) return;
 
-      // Remove fallback proxy
       if (this.proxyMesh) {
         this.modelGroup.remove(this.proxyMesh);
         this.proxyMesh = null;
       }
 
-      this.glbModel = clonedScene;
+      this.glbModel = scene;
+      this.bones = {};
 
-      // Ensure all meshes cast/receive shadows and record materials for hit-flash
-      this.originalMaterials = [];
       this.glbModel.traverse((child) => {
-        if (child.isMesh) {
+        if (child.isSkinnedMesh) {
+          this.skinnedMesh = child;
           child.castShadow = true;
           child.receiveShadow = true;
-          if (child.material) {
-            this.originalMaterials.push({
-              mesh: child,
-              mat: child.material
-            });
-          }
+        }
+        if (child.isBone) {
+          this.bones[child.name] = child;
         }
       });
 
-      // The GLB is centered on X and Z, feet at Y=0, height ~3.2m
-      this.glbModel.position.set(0, 0, 0);
+      this.hasSkeleton = Object.keys(this.bones).length >= 10;
       this.modelGroup.add(this.glbModel);
     });
   }
 
-  // --- FLASH IMPACT MATERIAL ON DAMAGE ---
+  // --- FLASH IMPACT MATERIAL ---
   flashHitMaterial() {
     this.hitFlashTimer = 0.12;
-    if (this.glbModel) {
-      this.glbModel.traverse((child) => {
-        if (child.isMesh && child.material && child.material.emissive) {
-          child.material.emissive.setHex(0xff3333);
-          child.material.emissiveIntensity = 1.0;
-        }
-      });
+    if (this.skinnedMesh && this.skinnedMesh.material && this.skinnedMesh.material.emissive) {
+      this.skinnedMesh.material.emissive.setHex(0xff3333);
+      this.skinnedMesh.material.emissiveIntensity = 1.0;
     }
-    if (this.auraLight) {
-      this.auraLight.intensity = 3.0;
-    }
+    if (this.auraLight) this.auraLight.intensity = 3.0;
   }
 
   restoreMaterials() {
-    if (this.glbModel) {
-      this.glbModel.traverse((child) => {
-        if (child.isMesh && child.material && child.material.emissive) {
-          child.material.emissive.setHex(0x000000);
-          child.material.emissiveIntensity = 0.0;
-        }
-      });
+    if (this.skinnedMesh && this.skinnedMesh.material && this.skinnedMesh.material.emissive) {
+      this.skinnedMesh.material.emissive.setHex(0x000000);
+      this.skinnedMesh.material.emissiveIntensity = 0.0;
     }
-    if (this.auraLight) {
-      this.auraLight.intensity = 1.2;
-    }
+    if (this.auraLight) this.auraLight.intensity = 1.2;
   }
 
   // ===================================================================
-  // 3D COMBAT KINEMATICS & SKELETAL TRANSFORMS
+  // 3D COMBAT ARTICULATION & SKELETAL SPLAY
   // ===================================================================
   updateAnimation(state, facing, delta) {
     this.animTime += delta;
     this.currentFacing = facing;
 
-    // Hit Flash Recovery
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
       if (this.hitFlashTimer <= 0) {
@@ -329,7 +326,7 @@ class HumanoidFighter3D {
       }
     }
 
-    // Dynamic ground contact shadow scaling with jumps
+    // Dynamic ground contact shadow scaling
     if (this.contactShadow) {
       const height = Math.max(0, this.root.position.y);
       const scale = Math.max(0.35, 1.0 - (height * 0.18));
@@ -337,81 +334,172 @@ class HumanoidFighter3D {
       this.contactShadow.material.opacity = Math.max(0.15, 0.85 - (height * 0.15));
     }
 
-    // Default VFX States
     if (this.blockShield) this.blockShield.visible = false;
     if (this.attackSpark) this.attackSpark.visible = false;
     if (this.superAura) this.superAura.visible = false;
 
-    // Base 3D facing angle:
-    // In our GLB, front of character faces +Z.
-    // When facing right (+1): rotate toward +X (+90°), angled ~14° toward camera (+Z)
-    // for clear 3D perspective showing chest, face, arms, and depth!
-    // When facing left (-1): rotate toward -X (-90°), angled ~14° toward camera.
+    // Base facing orientation:
+    // Front faces +Z. Angled slightly towards camera so face, chest, and arms are visible.
     const baseFacingY = facing === 1 ? (Math.PI / 2 - 0.24) : (-Math.PI / 2 + 0.24);
+    this.modelGroup.rotation.y = baseFacingY;
 
-    let targetPos = { x: 0, y: 0, z: 0 };
-    let targetRot = { x: 0, y: baseFacingY, z: 0 };
-    let targetScale = { x: 1.0, y: 1.0, z: 1.0 };
-    let lerpSpeed = 0.32;
+    // Motion group target transforms
+    let mPos = { x: 0, y: 0, z: 0 };
+    let mRot = { x: 0, y: 0, z: 0 };
+    let mLerp = 0.32;
+
+    // Bone target angles (in radians)
+    // Front arm (lead): arm_l when facing 1, arm_r when facing -1
+    // Rear arm (power): arm_r when facing 1, arm_l when facing -1
+    let b = {
+      pelvisY: 1.45,
+      spine: { x: 0, y: 0, z: 0 },
+      chest: { x: 0, y: 0, z: 0 },
+      head: { x: 0, y: 0, z: 0 },
+      // Lead arm / rear arm placeholders (assigned based on facing)
+      arm_l: { x: -0.65, y: 0, z: -0.25 },
+      forearm_l: { x: -1.35, y: 0, z: 0 },
+      arm_r: { x: -0.55, y: 0, z: 0.25 },
+      forearm_r: { x: -1.45, y: 0, z: 0 },
+      thigh_l: { x: -0.15, y: 0, z: 0 },
+      calf_l: { x: 0.25, y: 0, z: 0 },
+      foot_l: { x: 0, y: 0, z: 0 },
+      thigh_r: { x: 0.15, y: 0, z: 0 },
+      calf_r: { x: 0.25, y: 0, z: 0 },
+      foot_r: { x: 0, y: 0, z: 0 }
+    };
+
+    const isFwdLeadL = (facing === 1);
+    let boneLerp = 0.35;
 
     // -----------------------------------------------------------------
     // 1. IDLE (Athletic martial arts breathing bounce & ready guard)
     // -----------------------------------------------------------------
     if (state === 'idle') {
       const breath = Math.sin(this.animTime * 4.8);
-      targetPos.y = breath * 0.06;
-      targetRot.z = -0.04 * facing;
-      targetRot.x = 0.04;
-      targetScale.y = 1.0 - breath * 0.02;
-      targetScale.x = 1.0 + breath * 0.015;
+      b.pelvisY = 1.45 + breath * 0.05;
+      mPos.y = breath * 0.03;
+
+      // Fighting stance torso twist
+      b.spine.y = isFwdLeadL ? 0.32 : -0.32;
+      b.chest.y = isFwdLeadL ? 0.12 : -0.12;
+      b.spine.x = 0.04;
+
+      // Both fists guarding chin with rhythmic bobbing
+      if (isFwdLeadL) {
+        b.arm_l.x = -0.75 + breath * 0.04;
+        b.forearm_l.x = -1.55;
+        b.arm_r.x = -0.55 - breath * 0.04;
+        b.forearm_r.x = -1.65;
+        b.thigh_l.x = -0.2;
+        b.calf_l.x = 0.35;
+        b.thigh_r.x = 0.2;
+        b.calf_r.x = 0.25;
+      } else {
+        b.arm_r.x = -0.75 + breath * 0.04;
+        b.forearm_r.x = -1.55;
+        b.arm_l.x = -0.55 - breath * 0.04;
+        b.forearm_l.x = -1.65;
+        b.thigh_r.x = -0.2;
+        b.calf_r.x = 0.35;
+        b.thigh_l.x = 0.2;
+        b.calf_l.x = 0.25;
+      }
     }
     // -----------------------------------------------------------------
-    // 2. WALK FORWARD (Deep dynamic strides with athletic forward lean)
+    // 2. WALK FORWARD (Real alternating two-legged stride & arm pump!)
     // -----------------------------------------------------------------
     else if (state === 'walk_fwd') {
-      const stride = Math.sin(this.animTime * 11);
-      targetPos.y = Math.abs(stride) * 0.12;
-      targetRot.z = -0.16 * facing; // Dynamic forward lean into step
-      targetRot.x = Math.sin(this.animTime * 5.5) * 0.06;
-      targetRot.y = baseFacingY + stride * 0.08 * facing;
+      const stride = Math.sin(this.animTime * 10);
+      b.pelvisY = 1.45 + Math.abs(stride) * 0.08;
+      mRot.z = -0.12 * facing; // Dynamic forward lean
+
+      // Alternating leg swings and knee flexes
+      b.thigh_l.x = stride * 0.75;
+      b.thigh_r.x = -stride * 0.75;
+      b.calf_l.x = Math.max(0, -stride * 0.85);
+      b.calf_r.x = Math.max(0, stride * 0.85);
+
+      // Alternating arm pumps
+      b.arm_l.x = -0.65 - stride * 0.65;
+      b.forearm_l.x = -1.2;
+      b.arm_r.x = -0.65 + stride * 0.65;
+      b.forearm_r.x = -1.2;
+
+      b.spine.y = stride * 0.15;
     }
     // -----------------------------------------------------------------
-    // 3. WALK BACKWARD (Cautious defensive brawler retreat)
+    // 3. WALK BACKWARD (Defensive retreat steps & high chin guard)
     // -----------------------------------------------------------------
     else if (state === 'walk_back') {
-      const stride = Math.sin(this.animTime * 8.5);
-      targetPos.y = Math.abs(stride) * 0.08;
-      targetRot.z = 0.12 * facing; // Leaning backward in defensive guard
-      targetRot.y = baseFacingY - stride * 0.06 * facing;
+      const stride = Math.sin(this.animTime * 8);
+      b.pelvisY = 1.45 + Math.abs(stride) * 0.06;
+      mRot.z = 0.1 * facing;
+
+      b.thigh_l.x = -stride * 0.55;
+      b.thigh_r.x = stride * 0.55;
+      b.calf_l.x = Math.max(0, stride * 0.65);
+      b.calf_r.x = Math.max(0, -stride * 0.65);
+
+      b.forearm_l.x = -1.75;
+      b.forearm_r.x = -1.75;
     }
     // -----------------------------------------------------------------
-    // 4. JUMP (Airborne tuck & stretch)
+    // 4. JUMP (Airborne knee tuck & arms extended for balance)
     // -----------------------------------------------------------------
     else if (state === 'jump') {
-      targetScale.y = 1.16;
-      targetScale.x = 0.92;
-      targetRot.z = -0.1 * facing;
+      b.thigh_l.x = -0.95;
+      b.calf_l.x = 1.45;
+      b.thigh_r.x = -0.75;
+      b.calf_r.x = 1.25;
+
+      b.arm_l.x = -1.25;
+      b.arm_r.x = -1.25;
+      b.forearm_l.x = -0.85;
+      b.forearm_r.x = -0.85;
     }
     // -----------------------------------------------------------------
-    // 5. CROUCH (Low ducking guard)
+    // 5. CROUCH (Low ducking squat & tight guard)
     // -----------------------------------------------------------------
     else if (state === 'crouch') {
-      targetPos.y = -0.52;
-      targetScale.y = 0.65;
-      targetScale.x = 1.2;
-      targetScale.z = 1.15;
-      targetRot.z = -0.06 * facing;
+      b.pelvisY = 0.95;
+      b.thigh_l.x = -1.45;
+      b.calf_l.x = 2.1;
+      b.thigh_r.x = -1.45;
+      b.calf_r.x = 2.1;
+
+      b.spine.x = 0.35;
+      b.forearm_l.x = -1.95;
+      b.forearm_r.x = -1.95;
+      boneLerp = 0.45;
     }
     // -----------------------------------------------------------------
-    // 6. LIGHT JAB (Punch J - Snap punch thrust!)
+    // 6. LIGHT JAB (Punch J - Lead arm explodes straight out forward!)
     // -----------------------------------------------------------------
     else if (state === 'punch_1' || state === 'jab') {
-      targetPos.x = 0.65 * facing; // Body thrusts forward
-      targetPos.y = 0.04;
-      targetRot.z = -0.22 * facing; // Forward punch lunge
-      targetRot.y = baseFacingY + 0.35 * facing; // Torso snap
-      targetScale.x = 1.12;
-      lerpSpeed = 0.55; // Snappy attack frame
+      mPos.x = 0.55 * facing;
+      boneLerp = 0.65; // Ultra-snappy punch frame
+
+      if (isFwdLeadL) {
+        // Left arm extends full punch!
+        b.arm_l.x = -1.6;
+        b.arm_l.z = -0.05;
+        b.forearm_l.x = -0.05; // Elbow snaps straight!
+        b.spine.y = 0.45;
+
+        // Right hand guards face
+        b.arm_r.x = -0.55;
+        b.forearm_r.x = -1.85;
+      } else {
+        // Right arm extends full punch!
+        b.arm_r.x = -1.6;
+        b.arm_r.z = 0.05;
+        b.forearm_r.x = -0.05;
+        b.spine.y = -0.45;
+
+        b.arm_l.x = -0.55;
+        b.forearm_l.x = -1.85;
+      }
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -420,16 +508,36 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 7. HEAVY CROSS (Punch J,J - Deep power punch!)
+    // 7. HEAVY CROSS (Punch J,J - Rear arm lunges with full torso drive!)
     // -----------------------------------------------------------------
     else if (state === 'punch_2' || state === 'cross') {
-      targetPos.x = 1.15 * facing; // Deep lunging power drive
-      targetPos.y = -0.08;
-      targetRot.z = -0.32 * facing;
-      targetRot.y = baseFacingY - 0.48 * facing; // Full reverse torso torque
-      targetScale.x = 1.18;
-      targetScale.y = 0.95;
-      lerpSpeed = 0.5;
+      mPos.x = 0.95 * facing;
+      mPos.y = -0.08;
+      boneLerp = 0.55;
+
+      if (isFwdLeadL) {
+        // Rear arm (right) explodes with full torso torque!
+        b.arm_r.x = -1.65;
+        b.arm_r.z = 0.05;
+        b.forearm_r.x = -0.05;
+        b.spine.y = -0.65;
+        b.chest.y = -0.35;
+
+        b.arm_l.x = -0.25;
+        b.forearm_l.x = -1.65;
+        b.thigh_r.x = 0.45; // Back leg drives off floor
+      } else {
+        // Rear arm (left) explodes!
+        b.arm_l.x = -1.65;
+        b.arm_l.z = -0.05;
+        b.forearm_l.x = -0.05;
+        b.spine.y = 0.65;
+        b.chest.y = 0.35;
+
+        b.arm_r.x = -0.25;
+        b.forearm_r.x = -1.65;
+        b.thigh_l.x = 0.45;
+      }
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -438,16 +546,30 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 8. UPPERCUT (Down + J - Explosive vertical launch!)
+    // 8. RISING UPPERCUT (Down + J - Arm rockets straight upward!)
     // -----------------------------------------------------------------
     else if (state === 'uppercut') {
-      targetPos.x = 0.5 * facing;
-      targetPos.y = 0.85; // Rockets straight upward!
-      targetRot.z = 0.35 * facing; // Arched backward as punch rises
-      targetRot.x = -0.2;
-      targetScale.y = 1.35; // Vertical stretch
-      targetScale.x = 0.88;
-      lerpSpeed = 0.48;
+      mPos.x = 0.45 * facing;
+      mPos.y = 0.75; // Launches off the ground!
+      boneLerp = 0.52;
+
+      // Rear arm shoots straight up to the ceiling
+      if (isFwdLeadL) {
+        b.arm_r.x = -2.65; // Points straight up
+        b.forearm_r.x = -0.25;
+        b.spine.x = -0.35;
+        b.spine.y = -0.4;
+        b.head.x = -0.55; // Head looks up
+      } else {
+        b.arm_l.x = -2.65;
+        b.forearm_l.x = -0.25;
+        b.spine.x = -0.35;
+        b.spine.y = 0.4;
+        b.head.x = -0.55;
+      }
+
+      b.thigh_l.x = -0.45;
+      b.thigh_r.x = 0.35;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -455,16 +577,36 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 9. HIGH ROUNDHOUSE KICK (Kick K - 3D Spinning high arc!)
+    // 9. HIGH ROUNDHOUSE KICK (Kick K - Leg whips high in air!)
     // -----------------------------------------------------------------
     else if (state === 'kick_1' || state === 'roundhouse') {
-      targetPos.x = 0.85 * facing;
-      targetPos.y = 0.32;
-      targetRot.z = -0.55 * facing; // High kick tilt
-      targetRot.y = baseFacingY + 2.2 * facing; // Full 3D spinning rotation!
-      targetScale.x = 1.1;
-      targetScale.y = 1.05;
-      lerpSpeed = 0.45;
+      mPos.x = 0.75 * facing;
+      mPos.y = 0.25;
+      boneLerp = 0.48;
+
+      // Rear leg swings high in arc!
+      if (isFwdLeadL) {
+        b.thigh_r.x = -1.88; // Leg high in air!
+        b.thigh_r.z = -0.55;
+        b.calf_r.x = 0.15; // Foot extended!
+
+        b.thigh_l.x = 0.32;
+        b.calf_l.x = 0.45;
+        b.spine.z = 0.55;
+        b.spine.y = -0.55;
+      } else {
+        b.thigh_l.x = -1.88;
+        b.thigh_l.z = 0.55;
+        b.calf_l.x = 0.15;
+
+        b.thigh_r.x = 0.32;
+        b.calf_r.x = 0.45;
+        b.spine.z = -0.55;
+        b.spine.y = 0.55;
+      }
+
+      b.arm_l.x = -0.4;
+      b.arm_r.x = -0.4;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -472,16 +614,32 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 10. LOW SWEEP KICK (Down + K - Spinning floor sweep!)
+    // 10. LOW SWEEP KICK (Down + K - Leg sweeps across arena floor!)
     // -----------------------------------------------------------------
     else if (state === 'kick_2' || state === 'low_kick') {
-      targetPos.x = 0.85 * facing;
-      targetPos.y = -0.55; // Down on the arena floor
-      targetRot.z = 0.48 * facing;
-      targetRot.y = baseFacingY + 3.14 * facing; // Full 360 sweep rotation across floor!
-      targetScale.y = 0.68;
-      targetScale.x = 1.25;
-      lerpSpeed = 0.42;
+      mPos.x = 0.75 * facing;
+      mPos.y = -0.45;
+      b.pelvisY = 0.85;
+      boneLerp = 0.45;
+
+      // Low sweep
+      if (isFwdLeadL) {
+        b.thigh_r.x = -1.65;
+        b.thigh_r.z = 0.45;
+        b.calf_r.x = 0.05; // Straight leg sweep!
+
+        b.thigh_l.x = -1.45;
+        b.calf_l.x = 2.15;
+      } else {
+        b.thigh_l.x = -1.65;
+        b.thigh_l.z = -0.45;
+        b.calf_l.x = 0.05;
+
+        b.thigh_r.x = -1.45;
+        b.calf_r.x = 2.15;
+      }
+
+      b.spine.x = 0.5;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -489,22 +647,36 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 11. GRAB & THROW (I or J+K - Clutch & throw!)
+    // 11. GRAB & THROW (I or J+K - Both arms clutch forward!)
     // -----------------------------------------------------------------
     else if (state === 'grab') {
-      targetPos.x = 0.95 * facing;
-      targetRot.z = -0.35 * facing;
-      targetScale.x = 1.15;
-      lerpSpeed = 0.42;
+      mPos.x = 0.85 * facing;
+      b.arm_l.x = -1.45;
+      b.arm_l.z = 0.25;
+      b.forearm_l.x = -0.65;
+
+      b.arm_r.x = -1.45;
+      b.arm_r.z = -0.25;
+      b.forearm_r.x = -0.65;
+
+      b.spine.x = 0.3;
     }
     // -----------------------------------------------------------------
-    // 12. BLOCK GUARD (H or Back - Braced defense with Energy Shield)
+    // 12. BLOCK GUARD (H or Back - Forearms crossed tight!)
     // -----------------------------------------------------------------
     else if (state === 'block') {
-      targetPos.x = -0.22 * facing;
-      targetRot.z = 0.22 * facing; // Braced backward
-      targetScale.x = 0.92;
-      targetScale.y = 0.95;
+      mPos.x = -0.22 * facing;
+
+      // Both forearms crossed in front of face
+      b.arm_l.x = -1.25;
+      b.arm_l.z = 0.65;
+      b.forearm_l.x = -1.95;
+
+      b.arm_r.x = -1.25;
+      b.arm_r.z = -0.65;
+      b.forearm_r.x = -1.95;
+
+      b.head.x = 0.35; // Head tucked
 
       if (this.blockShield) {
         this.blockShield.visible = true;
@@ -513,55 +685,101 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 13. HIT REACTION (Impact stagger snapback)
+    // 13. HIT REACTION (Head snaps back violently, body recoils!)
     // -----------------------------------------------------------------
     else if (state === 'hit') {
-      targetPos.x = -0.55 * facing; // Snaps violently backward
-      targetPos.y = 0.12;
-      targetRot.z = 0.45 * facing;
-      targetRot.x = -0.25;
-      lerpSpeed = 0.65; // Instant impact flinch
+      mPos.x = -0.55 * facing;
+      mPos.y = 0.12;
+
+      b.head.x = -0.75; // Head snaps back!
+      b.head.y = -0.25;
+      b.chest.x = -0.45;
+      b.spine.x = -0.35;
+
+      b.arm_l.x = 0.45;
+      b.arm_r.x = 0.45;
+
+      boneLerp = 0.7; // Instant impact reaction
       this.flashHitMaterial();
     }
     // -----------------------------------------------------------------
-    // 14. KNOCKDOWN (Topples onto arena floor flat on back)
+    // 14. KNOCKDOWN (Falls completely onto arena floor)
     // -----------------------------------------------------------------
     else if (state === 'knockdown') {
-      targetPos.x = -1.1 * facing;
-      targetPos.y = -1.35; // Flat down on the arena floor
-      targetRot.z = facing * (Math.PI / 2.05); // Toppled 90 degrees backward
-      targetRot.y = baseFacingY;
-      lerpSpeed = 0.35;
+      mPos.x = -1.1 * facing;
+      mPos.y = -1.35;
+      mRot.z = facing * (Math.PI / 2.05);
+
+      b.arm_l.x = 0.35;
+      b.arm_l.z = -0.75;
+      b.arm_r.x = 0.35;
+      b.arm_r.z = 0.75;
+      b.thigh_l.x = -0.35;
+      b.calf_l.x = 0.55;
+      b.thigh_r.x = -0.35;
+      b.calf_r.x = 0.55;
     }
     // -----------------------------------------------------------------
-    // 15. SUPER MOVE CHARGE (Cinematic power levitation & aura)
+    // 15. SUPER MOVE CHARGE (Power levitation, arms flare back!)
     // -----------------------------------------------------------------
     else if (state === 'super_charge') {
-      targetPos.y = 0.45 + Math.sin(this.animTime * 16) * 0.08;
-      targetPos.x = (Math.random() - 0.5) * 0.12; // High-frequency power vibration
-      targetScale.set(1.1, 1.1, 1.1);
+      mPos.y = 0.45 + Math.sin(this.animTime * 16) * 0.08;
+      mPos.x = (Math.random() - 0.5) * 0.12;
+
+      b.arm_l.x = 0.65;
+      b.arm_l.z = -0.65;
+      b.forearm_l.x = -1.85;
+
+      b.arm_r.x = 0.65;
+      b.arm_r.z = 0.65;
+      b.forearm_r.x = -1.85;
+
+      b.chest.x = -0.35;
+      b.head.x = -0.45;
 
       if (this.superAura) {
         this.superAura.visible = true;
         this.superAura.rotation.z += 0.15;
       }
-      if (this.auraLight) {
-        this.auraLight.intensity = 3.5;
-      }
+      if (this.auraLight) this.auraLight.intensity = 3.5;
     }
 
-    // Apply Smooth Kinematic Lerping to 3D Transform
-    this.motionGroup.position.x += (targetPos.x - this.motionGroup.position.x) * lerpSpeed;
-    this.motionGroup.position.y += (targetPos.y - this.motionGroup.position.y) * lerpSpeed;
-    this.motionGroup.position.z += (targetPos.z - this.motionGroup.position.z) * lerpSpeed;
+    // Apply Lerping to Motion Group
+    this.motionGroup.position.x += (mPos.x - this.motionGroup.position.x) * mLerp;
+    this.motionGroup.position.y += (mPos.y - this.motionGroup.position.y) * mLerp;
+    this.motionGroup.position.z += (mPos.z - this.motionGroup.position.z) * mLerp;
 
-    this.motionGroup.rotation.x += (targetRot.x - this.motionGroup.rotation.x) * lerpSpeed;
-    this.motionGroup.rotation.y += (targetRot.y - this.motionGroup.rotation.y) * lerpSpeed;
-    this.motionGroup.rotation.z += (targetRot.z - this.motionGroup.rotation.z) * lerpSpeed;
+    this.motionGroup.rotation.x += (mRot.x - this.motionGroup.rotation.x) * mLerp;
+    this.motionGroup.rotation.y += (mRot.y - this.motionGroup.rotation.y) * mLerp;
+    this.motionGroup.rotation.z += (mRot.z - this.motionGroup.rotation.z) * mLerp;
 
-    this.motionGroup.scale.x += (targetScale.x - this.motionGroup.scale.x) * lerpSpeed;
-    this.motionGroup.scale.y += (targetScale.y - this.motionGroup.scale.y) * lerpSpeed;
-    this.motionGroup.scale.z += (targetScale.z - this.motionGroup.scale.z) * lerpSpeed;
+    // Apply Lerping to Every Skeletal Bone
+    if (this.hasSkeleton) {
+      const bn = this.bones;
+      if (bn.pelvis) {
+        bn.pelvis.position.y += (b.pelvisY - bn.pelvis.position.y) * boneLerp;
+      }
+      this.lerpBone(bn.spine, b.spine, boneLerp);
+      this.lerpBone(bn.chest, b.chest, boneLerp);
+      this.lerpBone(bn.head, b.head, boneLerp);
+      this.lerpBone(bn.arm_l, b.arm_l, boneLerp);
+      this.lerpBone(bn.forearm_l, b.forearm_l, boneLerp);
+      this.lerpBone(bn.arm_r, b.arm_r, boneLerp);
+      this.lerpBone(bn.forearm_r, b.forearm_r, boneLerp);
+      this.lerpBone(bn.thigh_l, b.thigh_l, boneLerp);
+      this.lerpBone(bn.calf_l, b.calf_l, boneLerp);
+      this.lerpBone(bn.foot_l, b.foot_l, boneLerp);
+      this.lerpBone(bn.thigh_r, b.thigh_r, boneLerp);
+      this.lerpBone(bn.calf_r, b.calf_r, boneLerp);
+      this.lerpBone(bn.foot_r, b.foot_r, boneLerp);
+    }
+  }
+
+  lerpBone(bone, targetRot, factor) {
+    if (!bone || !targetRot) return;
+    bone.rotation.x += (targetRot.x - bone.rotation.x) * factor;
+    bone.rotation.y += (targetRot.y - bone.rotation.y) * factor;
+    bone.rotation.z += (targetRot.z - bone.rotation.z) * factor;
   }
 
   destroy() {
