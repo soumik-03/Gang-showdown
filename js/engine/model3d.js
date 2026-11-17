@@ -1,107 +1,25 @@
 /**
  * ===================================================================
- *  GENUINE 3D FIGURE SKELETAL RIGGING & ARTICULATION (Three.js)
+ *  FIGHTKARO-STYLE 3D HUMANOID FIGHTER RIGGING & ANIMATIONS (Three.js)
  * ===================================================================
- *  Each of the 4 characters is an authentic, bone-rigged 3D SkinnedMesh:
- *    - Inspector Clue  (detective.glb)
- *    - Chrono Wizard   (wizard.glb)
- *    - The Navigator   (explorer.glb)
- *    - Pyre Titan      (golem.glb)
- *
- *  Full 16-Bone Anatomical Articulation:
- *    - Arms punch, jab, power cross, uppercut, and block!
- *    - Forearms bend at the elbow to guard and snap forward!
- *    - Legs step, walk in alternating strides, kick high, and sweep low!
- *    - Knees bend dynamically during strides, crouches, and kicks!
- *    - Head snaps back on hit impacts and ducks into guard!
- *    - Torso & spine twist with punch momentum and martial arts stances!
+ *  Full articulated 3D human figures inspired by FightKaro:
+ *    - Real human anatomy: head with expressive face texture, neck,
+ *      torso/kurta/jacket, shoulders, arms, elbows, fists, pelvis,
+ *      thighs, knees, calves, and shoes/sandals.
+ *    - Modular face mapping: user and friends' photo textures can be
+ *      applied directly onto the 3D head!
+ *    - Authentic FightKaro fighting moves:
+ *      * Martial arts horse stance with breathing bob & weave
+ *      * Dynamic two-legged stepping strides and arm pumps
+ *      * Snappy lead jabs with locking elbows
+ *      * Full-torso power crosses
+ *      * Ground-dip rising uppercuts
+ *      * High roundhouse kicks & low floor sweeps
+ *      * Crossed forearm boxing guard
+ *      * Staggered hit reactions & airborne tumble knockouts
+ *      * Victorious post-fight celebration dance ("Balle Balle" arms up!)
  * ===================================================================
  */
-
-// Global Model Buffer Cache (for instant instantiations of fresh SkinnedMeshes)
-window._modelBufferCache = window._modelBufferCache || new Map();
-window._gltfLoaderInstance = window._gltfLoaderInstance || null;
-
-function getGLTFLoader() {
-  if (!window._gltfLoaderInstance && typeof THREE !== 'undefined' && THREE.GLTFLoader) {
-    window._gltfLoaderInstance = new THREE.GLTFLoader();
-  }
-  return window._gltfLoaderInstance;
-}
-
-function fetchModelBuffer(path, callback) {
-  if (window._modelBufferCache.has(path)) {
-    callback(window._modelBufferCache.get(path));
-    return;
-  }
-  const xhr = new XMLHttpRequest();
-  xhr.open('GET', path, true);
-  xhr.responseType = 'arraybuffer';
-  xhr.onload = function() {
-    if (xhr.status === 200 || xhr.status === 0) {
-      window._modelBufferCache.set(path, xhr.response);
-      callback(xhr.response);
-    } else {
-      console.warn('Failed to load', path, xhr.status);
-      callback(null);
-    }
-  };
-  xhr.onerror = function() {
-    console.warn('Network error loading', path);
-    callback(null);
-  };
-  xhr.send();
-}
-
-function instantiateRiggedModel(path, onLoaded) {
-  fetchModelBuffer(path, (buffer) => {
-    if (!buffer) {
-      onLoaded(null);
-      return;
-    }
-    const loader = getGLTFLoader();
-    if (!loader) {
-      onLoaded(null);
-      return;
-    }
-    // Fresh slice of ArrayBuffer ensures independent SkinnedMesh and Skeleton
-    loader.parse(
-      buffer.slice(0),
-      '',
-      (gltf) => {
-        gltf.scene.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            if (child.material) {
-              child.material.roughness = 0.45;
-              child.material.metalness = 0.2;
-              child.material.side = THREE.DoubleSide;
-            }
-          }
-        });
-        onLoaded(gltf.scene);
-      },
-      (err) => {
-        console.warn('Error parsing rigged gltf:', err);
-        onLoaded(null);
-      }
-    );
-  });
-}
-
-// Proactive background preloading of all 4 character buffers
-if (typeof window !== 'undefined') {
-  const PRELOAD_PATHS = [
-    'assets/models/detective.glb',
-    'assets/models/wizard.glb',
-    'assets/models/explorer.glb',
-    'assets/models/golem.glb'
-  ];
-  setTimeout(() => {
-    PRELOAD_PATHS.forEach((p) => fetchModelBuffer(p, () => {}));
-  }, 50);
-}
 
 class HumanoidFighter3D {
   constructor(scene, config, isPlayer1 = true) {
@@ -109,47 +27,49 @@ class HumanoidFighter3D {
     this.config = config || {};
     this.isPlayer1 = isPlayer1;
     this.charId = config.id || 'detective';
-    this.modelPath = config.modelPath || `assets/models/${this.charId}.glb`;
 
-    // Root Group in world space
+    // Root Group (anchored at fighter position in world space)
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // Floor contact shadow
+    // Floor Contact Shadow (scales and fades with jumps and airborne tumbles)
     this.buildContactShadow();
 
-    // Motion group (handles body translations and global lunge/knockdown)
+    // Motion group (handles body translations and airborne trajectory)
     this.motionGroup = new THREE.Group();
     this.root.add(this.motionGroup);
 
-    // Inner Model group (handles 3D facing orientation towards opponent)
+    // Inner Model group (handles 3D facing angle)
     this.modelGroup = new THREE.Group();
     this.motionGroup.add(this.modelGroup);
+
+    // Joints dictionary for full anatomical articulation
+    this.joints = {};
+
+    // Build the 3D Humanoid Body
+    this.buildHumanoidBody();
 
     // Aura lighting & Combat VFX
     this.buildAuraLight();
     this.buildCombatVFX();
 
-    // Skeletal bones map (populated once SkinnedMesh is ready)
-    this.bones = {};
-    this.hasSkeleton = false;
-    this.skinnedMesh = null;
-    this.glbModel = null;
-    this.proxyMesh = null;
-    this.hitFlashTimer = 0;
-
-    // Timers & State
+    // State & Timers
     this.animTime = Math.random() * 10;
     this.currentFacing = isPlayer1 ? 1 : -1;
-
-    // Build immediate procedural proxy so screen is never blank
-    this.buildProceduralProxy();
-
-    // Load and attach genuine rigged 3D character model
-    this.loadRiggedGLB();
+    this.hitFlashTimer = 0;
+    this.meshParts = [];
   }
 
-  // --- FLOOR CONTACT SHADOW ---
+  // --- MATERIAL HELPER ---
+  mat(color, roughness = 0.55, metalness = 0.15) {
+    return new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: roughness,
+      metalness: metalness
+    });
+  }
+
+  // --- DYNAMIC FLOOR CONTACT SHADOW ---
   buildContactShadow() {
     const shadowCanvas = document.createElement('canvas');
     shadowCanvas.width = 128;
@@ -157,13 +77,13 @@ class HumanoidFighter3D {
     const sctx = shadowCanvas.getContext('2d');
     const sGrad = sctx.createRadialGradient(64, 64, 0, 64, 64, 64);
     sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.45)');
     sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     sctx.fillStyle = sGrad;
     sctx.fillRect(0, 0, 128, 128);
 
     const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
-    const shadowGeo = new THREE.PlaneGeometry(2.8, 1.8);
+    const shadowGeo = new THREE.PlaneGeometry(2.6, 1.6);
     const shadowMat = new THREE.MeshBasicMaterial({
       map: shadowTexture,
       transparent: true,
@@ -204,7 +124,7 @@ class HumanoidFighter3D {
     this.motionGroup.add(this.blockShield);
 
     // 2. Attack Hit Flash Spark
-    const sparkGeo = new THREE.RingGeometry(0.15, 0.65, 12);
+    const sparkGeo = new THREE.RingGeometry(0.15, 0.7, 12);
     const sparkMat = new THREE.MeshBasicMaterial({
       color: 0xfff200,
       side: THREE.DoubleSide,
@@ -216,7 +136,7 @@ class HumanoidFighter3D {
     this.attackSpark.visible = false;
     this.motionGroup.add(this.attackSpark);
 
-    // 3. Super Aura
+    // 3. Super Aura: Spinning energy ring
     const superTorusGeo = new THREE.TorusGeometry(1.2, 0.06, 8, 24);
     const superTorusMat = new THREE.MeshBasicMaterial({
       color: 0xff3838,
@@ -231,89 +151,243 @@ class HumanoidFighter3D {
     this.motionGroup.add(this.superAura);
   }
 
-  // --- IMMEDIATE PROCEDURAL PROXY ---
-  buildProceduralProxy() {
-    this.proxyMesh = new THREE.Group();
-    let pColor = 0x2e86de;
-    let sColor = 0xdcdde1;
-    if (this.charId === 'wizard') { pColor = 0x1e3799; sColor = 0xffffff; }
-    else if (this.charId === 'explorer') { pColor = 0xe67e22; sColor = 0xc8d6e5; }
-    else if (this.charId === 'golem') { pColor = 0x2f3640; sColor = 0xff4757; }
+  // ===================================================================
+  // BUILD FULL 3D HUMANOID BODY & CLOTHING HIERARCHY
+  // ===================================================================
+  buildHumanoidBody() {
+    const cfg = this.config.body || {};
+    // Palette selection
+    let skinCol = 0xf5d0b0; // Realistic warm skin tone
+    let clothCol1 = 0xe67e22; // Kurta / Shirt primary
+    let clothCol2 = 0xecf0f1; // Pajama / Pants secondary
+    let shoeCol = 0x2c3e50;  // Leather shoes / sandals
+    let hairCol = 0x2c3e50;  // Dark hair
 
-    const matP = new THREE.MeshStandardMaterial({ color: pColor, roughness: 0.5, metalness: 0.2 });
-    const matS = new THREE.MeshStandardMaterial({ color: sColor, roughness: 0.6, metalness: 0.1 });
+    if (this.charId === 'detective') {
+      clothCol1 = 0x2e86de; // Blue coat
+      clothCol2 = 0xdcdde1; // Light slacks
+      shoeCol = 0x1e272e;
+      hairCol = 0x8395a7;
+    } else if (this.charId === 'wizard') {
+      clothCol1 = 0x1e3799; // Deep blue robe/kurta
+      clothCol2 = 0xf8efba; // Gold embroidered silk
+      shoeCol = 0x3c40c6;
+      hairCol = 0xffffff;
+    } else if (this.charId === 'explorer') {
+      clothCol1 = 0xd35400; // Safari orange vest
+      clothCol2 = 0xbdc3c7; // Utility pants
+      shoeCol = 0x7f8c8d;
+      hairCol = 0x2c3e50;
+    } else if (this.charId === 'golem') {
+      clothCol1 = 0x2f3640; // Heavy obsidian vest
+      clothCol2 = 0xc0392b; // Crimson wraps
+      shoeCol = 0x192a56;
+      hairCol = 0xe84118;
+    }
 
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.55, 1.2, 12), matP);
-    torso.position.y = 1.6;
-    torso.castShadow = true;
-    this.proxyMesh.add(torso);
+    const skinMat = this.mat(skinCol, 0.65, 0.05);
+    const shirtMat = this.mat(clothCol1, 0.7, 0.05);
+    const pantsMat = this.mat(clothCol2, 0.75, 0.05);
+    const shoeMat = this.mat(shoeCol, 0.5, 0.2);
+    const hairMat = this.mat(hairCol, 0.85, 0.05);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 14, 14), matS);
-    head.position.y = 2.5;
-    head.castShadow = true;
-    this.proxyMesh.add(head);
+    // 1. Pelvis / Hips (Root of humanoid skeletal hierarchy at Y = 1.45)
+    this.pelvis = new THREE.Group();
+    this.pelvis.position.y = 1.45;
+    this.modelGroup.add(this.pelvis);
+    this.joints.pelvis = this.pelvis;
 
-    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 1.0, 8), matP);
-    legL.position.set(-0.35, 0.5, 0);
-    legL.castShadow = true;
-    this.proxyMesh.add(legL);
+    // Pelvis cloth mesh
+    const pelvisMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.44, 0.35, 12), pantsMat);
+    pelvisMesh.castShadow = true;
+    pelvisMesh.receiveShadow = true;
+    this.pelvis.add(pelvisMesh);
+    this.meshParts.push(pelvisMesh);
 
-    const legR = legL.clone();
-    legR.position.x = 0.35;
-    this.proxyMesh.add(legR);
+    // 2. Torso & Chest (Waist to neck)
+    this.torso = new THREE.Group();
+    this.torso.position.y = 0.2;
+    this.pelvis.add(this.torso);
+    this.joints.torso = this.torso;
 
-    this.modelGroup.add(this.proxyMesh);
+    // Kurta / Shirt Body
+    const torsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.48, 0.85, 12), shirtMat);
+    torsoMesh.position.y = 0.42;
+    torsoMesh.castShadow = true;
+    torsoMesh.receiveShadow = true;
+    this.torso.add(torsoMesh);
+    this.meshParts.push(torsoMesh);
+
+    // Kurta Lapel / Collar detail
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.12, 12), shirtMat);
+    collar.position.y = 0.85;
+    collar.castShadow = true;
+    this.torso.add(collar);
+    this.meshParts.push(collar);
+
+    // 3. Neck & Head
+    this.neck = new THREE.Group();
+    this.neck.position.y = 0.88;
+    this.torso.add(this.neck);
+    this.joints.neck = this.neck;
+
+    const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.22, 10), skinMat);
+    neckMesh.position.y = 0.11;
+    neckMesh.castShadow = true;
+    this.neck.add(neckMesh);
+    this.meshParts.push(neckMesh);
+
+    this.head = new THREE.Group();
+    this.head.position.y = 0.25;
+    this.neck.add(this.head);
+    this.joints.head = this.head;
+
+    // 3D Human Head Geometry
+    const headSphere = new THREE.Mesh(new THREE.SphereGeometry(0.44, 16, 16), skinMat);
+    headSphere.scale.set(1.0, 1.15, 1.05);
+    headSphere.castShadow = true;
+    this.head.add(headSphere);
+    this.meshParts.push(headSphere);
+
+    // Expressive Photo-Texture Face Plane (maps character avatar or friend photo!)
+    if (this.config.avatar) {
+      const texLoader = new THREE.TextureLoader();
+      texLoader.load(this.config.avatar, (tex) => {
+        const faceMat = new THREE.MeshBasicMaterial({
+          map: tex,
+          transparent: true
+        });
+        const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.68), faceMat);
+        facePlane.position.set(0, 0.04, 0.45);
+        this.head.add(facePlane);
+      });
+    }
+
+    // Stylized Hair / Cap
+    const hairMesh = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 14), hairMat);
+    hairMesh.position.set(0, 0.12, -0.05);
+    hairMesh.scale.set(1.02, 0.8, 1.05);
+    hairMesh.castShadow = true;
+    this.head.add(hairMesh);
+    this.meshParts.push(hairMesh);
+
+    // 4. Arms & Hands (Left & Right)
+    this.buildArm(1, shirtMat, skinMat);  // Right Arm (X > 0)
+    this.buildArm(-1, shirtMat, skinMat); // Left Arm (X < 0)
+
+    // 5. Legs & Shoes (Left & Right)
+    this.buildLeg(1, pantsMat, shoeMat);  // Right Leg (X > 0)
+    this.buildLeg(-1, pantsMat, shoeMat); // Left Leg (X < 0)
   }
 
-  // --- LOAD AND ATTACH RIGGED 3D CHARACTER MODEL ---
-  loadRiggedGLB() {
-    instantiateRiggedModel(this.modelPath, (scene) => {
-      if (!scene) return;
+  // --- BUILD ARTICULATED 3D ARM ---
+  buildArm(side, shirtMat, skinMat) {
+    const isRight = side === 1;
+    const prefix = isRight ? 'right' : 'left';
 
-      if (this.proxyMesh) {
-        this.modelGroup.remove(this.proxyMesh);
-        this.proxyMesh = null;
-      }
+    // Shoulder Pivot
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side * 0.62, 0.72, 0);
+    this.torso.add(shoulder);
+    this.joints[`${prefix}Shoulder`] = shoulder;
 
-      this.glbModel = scene;
-      this.bones = {};
+    // Shoulder cloth sleeve
+    const sleeve = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), shirtMat);
+    sleeve.castShadow = true;
+    shoulder.add(sleeve);
+    this.meshParts.push(sleeve);
 
-      this.glbModel.traverse((child) => {
-        if (child.isSkinnedMesh) {
-          this.skinnedMesh = child;
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-        if (child.isBone) {
-          this.bones[child.name] = child;
-        }
-      });
+    // Upper Arm
+    const upperArmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.55, 10), shirtMat);
+    upperArmMesh.position.y = -0.28;
+    upperArmMesh.castShadow = true;
+    shoulder.add(upperArmMesh);
+    this.meshParts.push(upperArmMesh);
 
-      this.hasSkeleton = Object.keys(this.bones).length >= 10;
-      this.modelGroup.add(this.glbModel);
-    });
+    // Elbow Pivot
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.55;
+    shoulder.add(elbow);
+    this.joints[`${prefix}Elbow`] = elbow;
+
+    // Forearm
+    const forearmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.5, 10), skinMat);
+    forearmMesh.position.y = -0.25;
+    forearmMesh.castShadow = true;
+    elbow.add(forearmMesh);
+    this.meshParts.push(forearmMesh);
+
+    // 3D Fist / Hand
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 0.22), skinMat);
+    hand.position.set(0, -0.52, 0.02);
+    hand.castShadow = true;
+    elbow.add(hand);
+    this.meshParts.push(hand);
+  }
+
+  // --- BUILD ARTICULATED 3D LEG ---
+  buildLeg(side, pantsMat, shoeMat) {
+    const isRight = side === 1;
+    const prefix = isRight ? 'right' : 'left';
+
+    // Hip Pivot
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.32, -0.15, 0);
+    this.pelvis.add(hip);
+    this.joints[`${prefix}Hip`] = hip;
+
+    // Thigh (Pants)
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.68, 10), pantsMat);
+    thigh.position.y = -0.34;
+    thigh.castShadow = true;
+    hip.add(thigh);
+    this.meshParts.push(thigh);
+
+    // Knee Pivot
+    const knee = new THREE.Group();
+    knee.position.y = -0.68;
+    hip.add(knee);
+    this.joints[`${prefix}Knee`] = knee;
+
+    // Calf / Lower Leg (Pants cuffs)
+    const calf = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.65, 10), pantsMat);
+    calf.position.y = -0.32;
+    calf.castShadow = true;
+    knee.add(calf);
+    this.meshParts.push(calf);
+
+    // 3D Shoe / Sandal (Peshawari / leather brawler footwear)
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.55), shoeMat);
+    shoe.position.set(0, -0.68, 0.12);
+    shoe.castShadow = true;
+    knee.add(shoe);
+    this.meshParts.push(shoe);
   }
 
   // --- FLASH IMPACT MATERIAL ---
   flashHitMaterial() {
     this.hitFlashTimer = 0.12;
-    if (this.skinnedMesh && this.skinnedMesh.material && this.skinnedMesh.material.emissive) {
-      this.skinnedMesh.material.emissive.setHex(0xff3333);
-      this.skinnedMesh.material.emissiveIntensity = 1.0;
-    }
+    this.meshParts.forEach((m) => {
+      if (m.material && m.material.emissive) {
+        m.material.emissive.setHex(0xff3333);
+        m.material.emissiveIntensity = 1.0;
+      }
+    });
     if (this.auraLight) this.auraLight.intensity = 3.0;
   }
 
   restoreMaterials() {
-    if (this.skinnedMesh && this.skinnedMesh.material && this.skinnedMesh.material.emissive) {
-      this.skinnedMesh.material.emissive.setHex(0x000000);
-      this.skinnedMesh.material.emissiveIntensity = 0.0;
-    }
+    this.meshParts.forEach((m) => {
+      if (m.material && m.material.emissive) {
+        m.material.emissive.setHex(0x000000);
+        m.material.emissiveIntensity = 0.0;
+      }
+    });
     if (this.auraLight) this.auraLight.intensity = 1.2;
   }
 
   // ===================================================================
-  // 3D COMBAT ARTICULATION & SKELETAL SPLAY
+  // FIGHTKARO-STYLE 3D COMBAT KINEMATICS & ANIMATION LOGIC
   // ===================================================================
   updateAnimation(state, facing, delta) {
     this.animTime += delta;
@@ -326,179 +400,162 @@ class HumanoidFighter3D {
       }
     }
 
-    // Dynamic ground contact shadow scaling
+    // Dynamic ground contact shadow scaling with jumps and air tumbles
     if (this.contactShadow) {
       const height = Math.max(0, this.root.position.y);
-      const scale = Math.max(0.35, 1.0 - (height * 0.18));
+      const scale = Math.max(0.3, 1.0 - (height * 0.18));
       this.contactShadow.scale.set(scale, scale, scale);
-      this.contactShadow.material.opacity = Math.max(0.15, 0.85 - (height * 0.15));
+      this.contactShadow.material.opacity = Math.max(0.12, 0.85 - (height * 0.14));
     }
 
     if (this.blockShield) this.blockShield.visible = false;
     if (this.attackSpark) this.attackSpark.visible = false;
     if (this.superAura) this.superAura.visible = false;
 
-    // Base facing orientation:
-    // Front faces +Z. Angled slightly towards camera so face, chest, and arms are visible.
-    const baseFacingY = facing === 1 ? (Math.PI / 2 - 0.24) : (-Math.PI / 2 + 0.24);
+    // Base facing orientation: turned towards opponent with a slight perspective angle
+    const baseFacingY = facing === 1 ? (Math.PI / 2 - 0.22) : (-Math.PI / 2 + 0.22);
     this.modelGroup.rotation.y = baseFacingY;
 
-    // Motion group target transforms
+    // Target transforms for joints
+    const j = this.joints;
+    let pelvisY = 1.45;
+    let torsoRot = { x: 0, y: 0, z: 0 };
+    let headRot = { x: 0, y: 0, z: 0 };
+
+    // Default neutral limb angles
+    let lShoulder = { x: -0.65, y: 0, z: 0.25 };
+    let rShoulder = { x: -0.65, y: 0, z: -0.25 };
+    let lElbow = { x: -1.35, y: 0, z: 0 };
+    let rElbow = { x: -1.35, y: 0, z: 0 };
+
+    let lHip = { x: 0, y: 0, z: 0 };
+    let rHip = { x: 0, y: 0, z: 0 };
+    let lKnee = { x: 0, y: 0, z: 0 };
+    let rKnee = { x: 0, y: 0, z: 0 };
+
     let mPos = { x: 0, y: 0, z: 0 };
     let mRot = { x: 0, y: 0, z: 0 };
-    let mLerp = 0.32;
-
-    // Bone target angles (in radians)
-    // Front arm (lead): arm_l when facing 1, arm_r when facing -1
-    // Rear arm (power): arm_r when facing 1, arm_l when facing -1
-    let b = {
-      pelvisY: 1.45,
-      spine: { x: 0, y: 0, z: 0 },
-      chest: { x: 0, y: 0, z: 0 },
-      head: { x: 0, y: 0, z: 0 },
-      // Lead arm / rear arm placeholders (assigned based on facing)
-      arm_l: { x: -0.65, y: 0, z: -0.25 },
-      forearm_l: { x: -1.35, y: 0, z: 0 },
-      arm_r: { x: -0.55, y: 0, z: 0.25 },
-      forearm_r: { x: -1.45, y: 0, z: 0 },
-      thigh_l: { x: -0.15, y: 0, z: 0 },
-      calf_l: { x: 0.25, y: 0, z: 0 },
-      foot_l: { x: 0, y: 0, z: 0 },
-      thigh_r: { x: 0.15, y: 0, z: 0 },
-      calf_r: { x: 0.25, y: 0, z: 0 },
-      foot_r: { x: 0, y: 0, z: 0 }
-    };
+    let lerpSpeed = 0.35;
 
     const isFwdLeadL = (facing === 1);
-    let boneLerp = 0.35;
 
     // -----------------------------------------------------------------
-    // 1. IDLE (Athletic martial arts breathing bounce & ready guard)
+    // 1. IDLE (FightKaro Martial Arts Brawler Guard Stance)
     // -----------------------------------------------------------------
     if (state === 'idle') {
       const breath = Math.sin(this.animTime * 4.8);
-      b.pelvisY = 1.45 + breath * 0.05;
-      mPos.y = breath * 0.03;
+      pelvisY = 1.45 + breath * 0.05;
 
-      // Fighting stance torso twist
-      b.spine.y = isFwdLeadL ? 0.32 : -0.32;
-      b.chest.y = isFwdLeadL ? 0.12 : -0.12;
-      b.spine.x = 0.04;
+      // Fighting stance torso angle
+      torsoRot.y = isFwdLeadL ? 0.35 : -0.35;
+      torsoRot.x = 0.05;
 
-      // Both fists guarding chin with rhythmic bobbing
+      // Both fists up in tight boxing guard, elbows bent ~90°, rhythmic bobbing
       if (isFwdLeadL) {
-        b.arm_l.x = -0.75 + breath * 0.04;
-        b.forearm_l.x = -1.55;
-        b.arm_r.x = -0.55 - breath * 0.04;
-        b.forearm_r.x = -1.65;
-        b.thigh_l.x = -0.2;
-        b.calf_l.x = 0.35;
-        b.thigh_r.x = 0.2;
-        b.calf_r.x = 0.25;
+        lShoulder.x = -0.75 + breath * 0.04;
+        lElbow.x = -1.65; // Left guard up protecting chin
+        rShoulder.x = -0.55 - breath * 0.04;
+        rElbow.x = -1.75; // Right fist cocked near jaw
+        lHip.x = -0.22;
+        lKnee.x = 0.38; // Horse stance bent knees
+        rHip.x = 0.22;
+        rKnee.x = 0.28;
       } else {
-        b.arm_r.x = -0.75 + breath * 0.04;
-        b.forearm_r.x = -1.55;
-        b.arm_l.x = -0.55 - breath * 0.04;
-        b.forearm_l.x = -1.65;
-        b.thigh_r.x = -0.2;
-        b.calf_r.x = 0.35;
-        b.thigh_l.x = 0.2;
-        b.calf_l.x = 0.25;
+        rShoulder.x = -0.75 + breath * 0.04;
+        rElbow.x = -1.65;
+        lShoulder.x = -0.55 - breath * 0.04;
+        lElbow.x = -1.75;
+        rHip.x = -0.22;
+        rKnee.x = 0.38;
+        lHip.x = 0.22;
+        lKnee.x = 0.28;
       }
     }
     // -----------------------------------------------------------------
-    // 2. WALK FORWARD (Real alternating two-legged stride & arm pump!)
+    // 2. WALK FORWARD (Dynamic Two-Legged Stepping Strides & Arm Pumps)
     // -----------------------------------------------------------------
     else if (state === 'walk_fwd') {
       const stride = Math.sin(this.animTime * 10);
-      b.pelvisY = 1.45 + Math.abs(stride) * 0.08;
-      mRot.z = -0.12 * facing; // Dynamic forward lean
+      pelvisY = 1.45 + Math.abs(stride) * 0.08;
+      mRot.z = -0.14 * facing; // Natural forward stride lean
 
-      // Alternating leg swings and knee flexes
-      b.thigh_l.x = stride * 0.75;
-      b.thigh_r.x = -stride * 0.75;
-      b.calf_l.x = Math.max(0, -stride * 0.85);
-      b.calf_r.x = Math.max(0, stride * 0.85);
+      // Alternating leg swings & knee flexes
+      lHip.x = stride * 0.75;
+      rHip.x = -stride * 0.75;
+      lKnee.x = Math.max(0, -stride * 0.85);
+      rKnee.x = Math.max(0, stride * 0.85);
 
-      // Alternating arm pumps
-      b.arm_l.x = -0.65 - stride * 0.65;
-      b.forearm_l.x = -1.2;
-      b.arm_r.x = -0.65 + stride * 0.65;
-      b.forearm_r.x = -1.2;
-
-      b.spine.y = stride * 0.15;
+      // Alternating arm swings
+      lShoulder.x = -0.65 - stride * 0.65;
+      rShoulder.x = -0.65 + stride * 0.65;
+      lElbow.x = -1.25;
+      rElbow.x = -1.25;
+      torsoRot.y = stride * 0.15;
     }
     // -----------------------------------------------------------------
-    // 3. WALK BACKWARD (Defensive retreat steps & high chin guard)
+    // 3. WALK BACKWARD (Defensive Back-Stepping Retreat)
     // -----------------------------------------------------------------
     else if (state === 'walk_back') {
       const stride = Math.sin(this.animTime * 8);
-      b.pelvisY = 1.45 + Math.abs(stride) * 0.06;
-      mRot.z = 0.1 * facing;
+      pelvisY = 1.45 + Math.abs(stride) * 0.06;
+      mRot.z = 0.12 * facing;
 
-      b.thigh_l.x = -stride * 0.55;
-      b.thigh_r.x = stride * 0.55;
-      b.calf_l.x = Math.max(0, stride * 0.65);
-      b.calf_r.x = Math.max(0, -stride * 0.65);
+      lHip.x = -stride * 0.55;
+      rHip.x = stride * 0.55;
+      lKnee.x = Math.max(0, stride * 0.65);
+      rKnee.x = Math.max(0, -stride * 0.65);
 
-      b.forearm_l.x = -1.75;
-      b.forearm_r.x = -1.75;
+      lElbow.x = -1.75;
+      rElbow.x = -1.75;
     }
     // -----------------------------------------------------------------
-    // 4. JUMP (Airborne knee tuck & arms extended for balance)
+    // 4. JUMP (Airborne Tuck with Knees Raised)
     // -----------------------------------------------------------------
     else if (state === 'jump') {
-      b.thigh_l.x = -0.95;
-      b.calf_l.x = 1.45;
-      b.thigh_r.x = -0.75;
-      b.calf_r.x = 1.25;
+      lHip.x = -0.95;
+      lKnee.x = 1.45;
+      rHip.x = -0.75;
+      rKnee.x = 1.25;
 
-      b.arm_l.x = -1.25;
-      b.arm_r.x = -1.25;
-      b.forearm_l.x = -0.85;
-      b.forearm_r.x = -0.85;
+      lShoulder.x = -1.25;
+      rShoulder.x = -1.25;
+      lElbow.x = -0.85;
+      rElbow.x = -0.85;
     }
     // -----------------------------------------------------------------
-    // 5. CROUCH (Low ducking squat & tight guard)
+    // 5. CROUCH (Low Ducking Guard)
     // -----------------------------------------------------------------
     else if (state === 'crouch') {
-      b.pelvisY = 0.95;
-      b.thigh_l.x = -1.45;
-      b.calf_l.x = 2.1;
-      b.thigh_r.x = -1.45;
-      b.calf_r.x = 2.1;
+      pelvisY = 0.95;
+      lHip.x = -1.45;
+      lKnee.x = 2.15;
+      rHip.x = -1.45;
+      rKnee.x = 2.15;
 
-      b.spine.x = 0.35;
-      b.forearm_l.x = -1.95;
-      b.forearm_r.x = -1.95;
-      boneLerp = 0.45;
+      torsoRot.x = 0.35;
+      lElbow.x = -1.95;
+      rElbow.x = -1.95;
+      lerpSpeed = 0.5;
     }
     // -----------------------------------------------------------------
-    // 6. LIGHT JAB (Punch J - Lead arm explodes straight out forward!)
+    // 6. LIGHT JAB (Punch J - Lead Arm Snaps Straight Out!)
     // -----------------------------------------------------------------
     else if (state === 'punch_1' || state === 'jab') {
       mPos.x = 0.55 * facing;
-      boneLerp = 0.65; // Ultra-snappy punch frame
+      lerpSpeed = 0.7; // Fast snap
 
       if (isFwdLeadL) {
-        // Left arm extends full punch!
-        b.arm_l.x = -1.6;
-        b.arm_l.z = -0.05;
-        b.forearm_l.x = -0.05; // Elbow snaps straight!
-        b.spine.y = 0.45;
-
-        // Right hand guards face
-        b.arm_r.x = -0.55;
-        b.forearm_r.x = -1.85;
+        lShoulder.x = -1.62; // Straight out horizontally!
+        lElbow.x = -0.05;    // Elbow locks forward into punch!
+        torsoRot.y = 0.45;   // Torso twist
+        rShoulder.x = -0.55;
+        rElbow.x = -1.85;    // Guard face
       } else {
-        // Right arm extends full punch!
-        b.arm_r.x = -1.6;
-        b.arm_r.z = 0.05;
-        b.forearm_r.x = -0.05;
-        b.spine.y = -0.45;
-
-        b.arm_l.x = -0.55;
-        b.forearm_l.x = -1.85;
+        rShoulder.x = -1.62;
+        rElbow.x = -0.05;
+        torsoRot.y = -0.45;
+        lShoulder.x = -0.55;
+        lElbow.x = -1.85;
       }
 
       if (this.attackSpark) {
@@ -508,35 +565,27 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 7. HEAVY CROSS (Punch J,J - Rear arm lunges with full torso drive!)
+    // 7. HEAVY CROSS (Punch J,J - Rear Power Punch Drives Forward!)
     // -----------------------------------------------------------------
     else if (state === 'punch_2' || state === 'cross') {
       mPos.x = 0.95 * facing;
       mPos.y = -0.08;
-      boneLerp = 0.55;
+      lerpSpeed = 0.55;
 
       if (isFwdLeadL) {
-        // Rear arm (right) explodes with full torso torque!
-        b.arm_r.x = -1.65;
-        b.arm_r.z = 0.05;
-        b.forearm_r.x = -0.05;
-        b.spine.y = -0.65;
-        b.chest.y = -0.35;
-
-        b.arm_l.x = -0.25;
-        b.forearm_l.x = -1.65;
-        b.thigh_r.x = 0.45; // Back leg drives off floor
+        rShoulder.x = -1.68; // Rear arm full extension!
+        rElbow.x = -0.05;
+        torsoRot.y = -0.65;  // Deep reverse torso torque
+        lShoulder.x = -0.25;
+        lElbow.x = -1.65;
+        rHip.x = 0.45;       // Back leg drives off floor
       } else {
-        // Rear arm (left) explodes!
-        b.arm_l.x = -1.65;
-        b.arm_l.z = -0.05;
-        b.forearm_l.x = -0.05;
-        b.spine.y = 0.65;
-        b.chest.y = 0.35;
-
-        b.arm_r.x = -0.25;
-        b.forearm_r.x = -1.65;
-        b.thigh_l.x = 0.45;
+        lShoulder.x = -1.68;
+        lElbow.x = -0.05;
+        torsoRot.y = 0.65;
+        rShoulder.x = -0.25;
+        rElbow.x = -1.65;
+        lHip.x = 0.45;
       }
 
       if (this.attackSpark) {
@@ -546,30 +595,29 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 8. RISING UPPERCUT (Down + J - Arm rockets straight upward!)
+    // 8. RISING UPPERCUT (FightKaro Ground-Dip Uppercut!)
     // -----------------------------------------------------------------
     else if (state === 'uppercut') {
-      mPos.x = 0.45 * facing;
-      mPos.y = 0.75; // Launches off the ground!
-      boneLerp = 0.52;
+      mPos.x = 0.5 * facing;
+      mPos.y = 0.85; // Launches off the arena floor!
+      lerpSpeed = 0.55;
 
-      // Rear arm shoots straight up to the ceiling
       if (isFwdLeadL) {
-        b.arm_r.x = -2.65; // Points straight up
-        b.forearm_r.x = -0.25;
-        b.spine.x = -0.35;
-        b.spine.y = -0.4;
-        b.head.x = -0.55; // Head looks up
+        rShoulder.x = -2.65; // Right arm shoots straight up to sky!
+        rElbow.x = -0.25;
+        torsoRot.x = -0.35;
+        torsoRot.y = -0.4;
+        headRot.x = -0.55;  // Head tracks rising punch
       } else {
-        b.arm_l.x = -2.65;
-        b.forearm_l.x = -0.25;
-        b.spine.x = -0.35;
-        b.spine.y = 0.4;
-        b.head.x = -0.55;
+        lShoulder.x = -2.65;
+        lElbow.x = -0.25;
+        torsoRot.x = -0.35;
+        torsoRot.y = 0.4;
+        headRot.x = -0.55;
       }
 
-      b.thigh_l.x = -0.45;
-      b.thigh_r.x = 0.35;
+      lHip.x = -0.45;
+      rHip.x = 0.35;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -577,36 +625,33 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 9. HIGH ROUNDHOUSE KICK (Kick K - Leg whips high in air!)
+    // 9. HIGH ROUNDHOUSE KICK (Leg Whips High in Overhead Arc!)
     // -----------------------------------------------------------------
     else if (state === 'kick_1' || state === 'roundhouse') {
       mPos.x = 0.75 * facing;
       mPos.y = 0.25;
-      boneLerp = 0.48;
+      lerpSpeed = 0.5;
 
-      // Rear leg swings high in arc!
       if (isFwdLeadL) {
-        b.thigh_r.x = -1.88; // Leg high in air!
-        b.thigh_r.z = -0.55;
-        b.calf_r.x = 0.15; // Foot extended!
-
-        b.thigh_l.x = 0.32;
-        b.calf_l.x = 0.45;
-        b.spine.z = 0.55;
-        b.spine.y = -0.55;
+        rHip.x = -1.88; // Leg high at head height!
+        rHip.z = -0.55;
+        rKnee.x = 0.15; // Foot whips forward!
+        lHip.x = 0.32;  // Standing leg bends to balance
+        lKnee.x = 0.45;
+        torsoRot.z = 0.55;
+        torsoRot.y = -0.55;
       } else {
-        b.thigh_l.x = -1.88;
-        b.thigh_l.z = 0.55;
-        b.calf_l.x = 0.15;
-
-        b.thigh_r.x = 0.32;
-        b.calf_r.x = 0.45;
-        b.spine.z = -0.55;
-        b.spine.y = 0.55;
+        lHip.x = -1.88;
+        lHip.z = 0.55;
+        lKnee.x = 0.15;
+        rHip.x = 0.32;
+        rKnee.x = 0.45;
+        torsoRot.z = -0.55;
+        torsoRot.y = 0.55;
       }
 
-      b.arm_l.x = -0.4;
-      b.arm_r.x = -0.4;
+      lShoulder.x = -0.4;
+      rShoulder.x = -0.4;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -614,32 +659,29 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 10. LOW SWEEP KICK (Down + K - Leg sweeps across arena floor!)
+    // 10. LOW SWEEP KICK (FightKaro Floor Sweep!)
     // -----------------------------------------------------------------
     else if (state === 'kick_2' || state === 'low_kick') {
       mPos.x = 0.75 * facing;
       mPos.y = -0.45;
-      b.pelvisY = 0.85;
-      boneLerp = 0.45;
+      pelvisY = 0.85;
+      lerpSpeed = 0.45;
 
-      // Low sweep
       if (isFwdLeadL) {
-        b.thigh_r.x = -1.65;
-        b.thigh_r.z = 0.45;
-        b.calf_r.x = 0.05; // Straight leg sweep!
-
-        b.thigh_l.x = -1.45;
-        b.calf_l.x = 2.15;
+        rHip.x = -1.65;
+        rHip.z = 0.45;
+        rKnee.x = 0.05; // Straight leg sweeps floor!
+        lHip.x = -1.45; // Deep squat on other leg
+        lKnee.x = 2.15;
       } else {
-        b.thigh_l.x = -1.65;
-        b.thigh_l.z = -0.45;
-        b.calf_l.x = 0.05;
-
-        b.thigh_r.x = -1.45;
-        b.calf_r.x = 2.15;
+        lHip.x = -1.65;
+        lHip.z = -0.45;
+        lKnee.x = 0.05;
+        rHip.x = -1.45;
+        rKnee.x = 2.15;
       }
 
-      b.spine.x = 0.5;
+      torsoRot.x = 0.5;
 
       if (this.attackSpark) {
         this.attackSpark.visible = true;
@@ -647,36 +689,30 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 11. GRAB & THROW (I or J+K - Both arms clutch forward!)
+    // 11. GRAB & THROW (Both Arms Clutch Forward)
     // -----------------------------------------------------------------
     else if (state === 'grab') {
       mPos.x = 0.85 * facing;
-      b.arm_l.x = -1.45;
-      b.arm_l.z = 0.25;
-      b.forearm_l.x = -0.65;
-
-      b.arm_r.x = -1.45;
-      b.arm_r.z = -0.25;
-      b.forearm_r.x = -0.65;
-
-      b.spine.x = 0.3;
+      lShoulder.x = -1.45;
+      lElbow.x = -0.65;
+      rShoulder.x = -1.45;
+      rElbow.x = -0.65;
+      torsoRot.x = 0.3;
     }
     // -----------------------------------------------------------------
-    // 12. BLOCK GUARD (H or Back - Forearms crossed tight!)
+    // 12. BLOCK GUARD (Forearms Crossed Across Face)
     // -----------------------------------------------------------------
     else if (state === 'block') {
       mPos.x = -0.22 * facing;
+      lShoulder.x = -1.25;
+      lShoulder.z = 0.65;
+      lElbow.x = -1.95; // Crossed forearm defense!
 
-      // Both forearms crossed in front of face
-      b.arm_l.x = -1.25;
-      b.arm_l.z = 0.65;
-      b.forearm_l.x = -1.95;
+      rShoulder.x = -1.25;
+      rShoulder.z = -0.65;
+      rElbow.x = -1.95;
 
-      b.arm_r.x = -1.25;
-      b.arm_r.z = -0.65;
-      b.forearm_r.x = -1.95;
-
-      b.head.x = 0.35; // Head tucked
+      headRot.x = 0.35; // Chin tucked
 
       if (this.blockShield) {
         this.blockShield.visible = true;
@@ -685,57 +721,82 @@ class HumanoidFighter3D {
       }
     }
     // -----------------------------------------------------------------
-    // 13. HIT REACTION (Head snaps back violently, body recoils!)
+    // 13. HIT REACTION (Head Snaps Back, Body Recoils)
     // -----------------------------------------------------------------
     else if (state === 'hit') {
       mPos.x = -0.55 * facing;
       mPos.y = 0.12;
 
-      b.head.x = -0.75; // Head snaps back!
-      b.head.y = -0.25;
-      b.chest.x = -0.45;
-      b.spine.x = -0.35;
+      headRot.x = -0.75; // Head snaps backward!
+      headRot.y = -0.25;
+      torsoRot.x = -0.45;
 
-      b.arm_l.x = 0.45;
-      b.arm_r.x = 0.45;
+      lShoulder.x = 0.45;
+      rShoulder.x = 0.45;
 
-      boneLerp = 0.7; // Instant impact reaction
+      lerpSpeed = 0.7; // Fast recoil
       this.flashHitMaterial();
     }
     // -----------------------------------------------------------------
-    // 14. KNOCKDOWN (Falls completely onto arena floor)
+    // 14. KNOCKDOWN (Tumbles Airborne and Lands Flat on Back)
     // -----------------------------------------------------------------
     else if (state === 'knockdown') {
       mPos.x = -1.1 * facing;
       mPos.y = -1.35;
       mRot.z = facing * (Math.PI / 2.05);
 
-      b.arm_l.x = 0.35;
-      b.arm_l.z = -0.75;
-      b.arm_r.x = 0.35;
-      b.arm_r.z = 0.75;
-      b.thigh_l.x = -0.35;
-      b.calf_l.x = 0.55;
-      b.thigh_r.x = -0.35;
-      b.calf_r.x = 0.55;
+      lShoulder.x = 0.35;
+      lShoulder.z = -0.75;
+      rShoulder.x = 0.35;
+      rShoulder.z = 0.75;
+      lHip.x = -0.35;
+      lKnee.x = 0.55;
+      rHip.x = -0.35;
+      rKnee.x = 0.55;
     }
     // -----------------------------------------------------------------
-    // 15. SUPER MOVE CHARGE (Power levitation, arms flare back!)
+    // 15. VICTORY CELEBRATION DANCE (FightKaro "Balle Balle" Dance!)
+    // -----------------------------------------------------------------
+    else if (state === 'victory_dance' || state === 'win') {
+      const danceStep = Math.sin(this.animTime * 9);
+      pelvisY = 1.45 + Math.abs(danceStep) * 0.12;
+
+      // Both arms waving high in the air celebrating!
+      lShoulder.x = -2.85 + Math.sin(this.animTime * 6) * 0.25;
+      lShoulder.z = 0.45;
+      lElbow.x = -0.65;
+
+      rShoulder.x = -2.85 - Math.sin(this.animTime * 6) * 0.25;
+      rShoulder.z = -0.45;
+      rElbow.x = -0.65;
+
+      // One knee bouncing high in celebration!
+      lHip.x = Math.max(-1.1, danceStep * 1.1);
+      lKnee.x = Math.max(0.2, danceStep * 1.5);
+      rHip.x = -danceStep * 0.3;
+      rKnee.x = 0.3;
+
+      headRot.y = Math.sin(this.animTime * 5) * 0.35;
+      headRot.x = -0.25; // Looking up joyfully
+      torsoRot.z = Math.sin(this.animTime * 4.5) * 0.15;
+    }
+    // -----------------------------------------------------------------
+    // 16. SUPER MOVE CHARGE (Power Levitation with Vibration)
     // -----------------------------------------------------------------
     else if (state === 'super_charge') {
       mPos.y = 0.45 + Math.sin(this.animTime * 16) * 0.08;
       mPos.x = (Math.random() - 0.5) * 0.12;
 
-      b.arm_l.x = 0.65;
-      b.arm_l.z = -0.65;
-      b.forearm_l.x = -1.85;
+      lShoulder.x = 0.65;
+      lShoulder.z = -0.65;
+      lElbow.x = -1.85;
 
-      b.arm_r.x = 0.65;
-      b.arm_r.z = 0.65;
-      b.forearm_r.x = -1.85;
+      rShoulder.x = 0.65;
+      rShoulder.z = 0.65;
+      rElbow.x = -1.85;
 
-      b.chest.x = -0.35;
-      b.head.x = -0.45;
+      torsoRot.x = -0.35;
+      headRot.x = -0.45;
 
       if (this.superAura) {
         this.superAura.visible = true;
@@ -745,41 +806,36 @@ class HumanoidFighter3D {
     }
 
     // Apply Lerping to Motion Group
-    this.motionGroup.position.x += (mPos.x - this.motionGroup.position.x) * mLerp;
-    this.motionGroup.position.y += (mPos.y - this.motionGroup.position.y) * mLerp;
-    this.motionGroup.position.z += (mPos.z - this.motionGroup.position.z) * mLerp;
+    this.motionGroup.position.x += (mPos.x - this.motionGroup.position.x) * lerpSpeed;
+    this.motionGroup.position.y += (mPos.y - this.motionGroup.position.y) * lerpSpeed;
+    this.motionGroup.position.z += (mPos.z - this.motionGroup.position.z) * lerpSpeed;
 
-    this.motionGroup.rotation.x += (mRot.x - this.motionGroup.rotation.x) * mLerp;
-    this.motionGroup.rotation.y += (mRot.y - this.motionGroup.rotation.y) * mLerp;
-    this.motionGroup.rotation.z += (mRot.z - this.motionGroup.rotation.z) * mLerp;
+    this.motionGroup.rotation.x += (mRot.x - this.motionGroup.rotation.x) * lerpSpeed;
+    this.motionGroup.rotation.y += (mRot.y - this.motionGroup.rotation.y) * lerpSpeed;
+    this.motionGroup.rotation.z += (mRot.z - this.motionGroup.rotation.z) * lerpSpeed;
 
-    // Apply Lerping to Every Skeletal Bone
-    if (this.hasSkeleton) {
-      const bn = this.bones;
-      if (bn.pelvis) {
-        bn.pelvis.position.y += (b.pelvisY - bn.pelvis.position.y) * boneLerp;
-      }
-      this.lerpBone(bn.spine, b.spine, boneLerp);
-      this.lerpBone(bn.chest, b.chest, boneLerp);
-      this.lerpBone(bn.head, b.head, boneLerp);
-      this.lerpBone(bn.arm_l, b.arm_l, boneLerp);
-      this.lerpBone(bn.forearm_l, b.forearm_l, boneLerp);
-      this.lerpBone(bn.arm_r, b.arm_r, boneLerp);
-      this.lerpBone(bn.forearm_r, b.forearm_r, boneLerp);
-      this.lerpBone(bn.thigh_l, b.thigh_l, boneLerp);
-      this.lerpBone(bn.calf_l, b.calf_l, boneLerp);
-      this.lerpBone(bn.foot_l, b.foot_l, boneLerp);
-      this.lerpBone(bn.thigh_r, b.thigh_r, boneLerp);
-      this.lerpBone(bn.calf_r, b.calf_r, boneLerp);
-      this.lerpBone(bn.foot_r, b.foot_r, boneLerp);
-    }
+    // Apply Lerping to Every Joint
+    if (this.pelvis) this.pelvis.position.y += (pelvisY - this.pelvis.position.y) * lerpSpeed;
+    this.lerpRot(j.torso, torsoRot, lerpSpeed);
+    this.lerpRot(j.neck, { x: 0, y: 0, z: 0 }, lerpSpeed);
+    this.lerpRot(j.head, headRot, lerpSpeed);
+
+    this.lerpRot(j.leftShoulder, lShoulder, lerpSpeed);
+    this.lerpRot(j.leftElbow, lElbow, lerpSpeed);
+    this.lerpRot(j.rightShoulder, rShoulder, lerpSpeed);
+    this.lerpRot(j.rightElbow, rElbow, lerpSpeed);
+
+    this.lerpRot(j.leftHip, lHip, lerpSpeed);
+    this.lerpRot(j.leftKnee, lKnee, lerpSpeed);
+    this.lerpRot(j.rightHip, rHip, lerpSpeed);
+    this.lerpRot(j.rightKnee, rKnee, lerpSpeed);
   }
 
-  lerpBone(bone, targetRot, factor) {
-    if (!bone || !targetRot) return;
-    bone.rotation.x += (targetRot.x - bone.rotation.x) * factor;
-    bone.rotation.y += (targetRot.y - bone.rotation.y) * factor;
-    bone.rotation.z += (targetRot.z - bone.rotation.z) * factor;
+  lerpRot(obj, target, factor) {
+    if (!obj || !target) return;
+    obj.rotation.x += (target.x - obj.rotation.x) * factor;
+    obj.rotation.y += (target.y - obj.rotation.y) * factor;
+    obj.rotation.z += (target.z - obj.rotation.z) * factor;
   }
 
   destroy() {

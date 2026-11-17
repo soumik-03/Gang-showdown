@@ -2,13 +2,19 @@
  * ===================================================================
  *  3D FIGHTER CONTROLLER & FIGHTKARO COMBAT LOGIC
  * ===================================================================
+ *  - Full 3D humanoid model animation control
+ *  - Airborne flying uppercut knockback physics & tumbling
+ *  - Comic speech bubble dialogue system
+ *  - Combo counters & Brink-of-Health Critical Rage mechanic
+ *  - Post-fight victory dance & celebratory shouts
+ * ===================================================================
  */
 
 class Fighter3D {
   constructor(scene3D, config, startX, isPlayer1 = true) {
     this.scene3D = scene3D;
-    this.config = config;
-    this.name = config.name;
+    this.config = config || {};
+    this.name = config.name || 'Brawler';
     this.isPlayer1 = isPlayer1;
 
     // 3D Coordinates
@@ -16,13 +22,13 @@ class Fighter3D {
     this.vel = { x: 0, y: 0, z: 0 };
 
     // Movement & Physics
-    this.speed = 4.8;
-    this.jumpForce = 8.5;
-    this.gravity = 22.0;
+    this.speed = 5.2;
+    this.jumpForce = 9.2;
+    this.gravity = 24.0;
     this.isGrounded = true;
     this.facing = isPlayer1 ? 1 : -1;
 
-    // Combat Stats: Increased HP for epic extended brawls
+    // Combat Stats
     this.maxHealth = 220;
     this.health = 220;
     this.superMeter = 0; // 0 to 100%
@@ -40,9 +46,19 @@ class Fighter3D {
     this.stateTimer = 0;
     this.hasHitOpponent = false;
 
+    // Comic Speech Bubble State
+    this.bubbleText = '';
+    this.bubbleTimer = 0;
+
     // 3D Humanoid Model Instance
     this.model = new HumanoidFighter3D(scene3D.scene, config, isPlayer1);
     this.updateModelTransform();
+  }
+
+  // --- COMIC SPEECH BUBBLE TRIGGER ---
+  sayBubble(text, duration = 2.4) {
+    this.bubbleText = text;
+    this.bubbleTimer = duration;
   }
 
   // --- CONTROLS ---
@@ -97,7 +113,8 @@ class Fighter3D {
 
     if (this.isCrouching) {
       this.state = 'uppercut';
-      this.stateTimer = 0.32;
+      this.stateTimer = 0.35;
+      if (Math.random() < 0.4) this.sayBubble("UPPERCUT! 💥", 1.8);
     } else if (this.state === 'punch_1') {
       this.state = 'punch_2';
       this.stateTimer = 0.35;
@@ -115,7 +132,8 @@ class Fighter3D {
 
     if (this.isCrouching) {
       this.state = 'kick_2';
-      this.stateTimer = 0.38;
+      this.stateTimer = 0.4;
+      if (Math.random() < 0.4) this.sayBubble("SWEEP! 🌪️", 1.8);
     } else {
       this.state = 'kick_1';
       this.stateTimer = 0.36;
@@ -141,8 +159,10 @@ class Fighter3D {
     this.stateTimer = 0.85;
     this.vel.x = 0;
 
+    this.sayBubble(this.config.superMove.shout, 2.8);
+
     if (window.soundEngine) window.soundEngine.playSuperCharge();
-    if (this.scene3D) this.scene3D.triggerShake(0.55);
+    if (this.scene3D) this.scene3D.triggerShake(0.65);
 
     if (window.gameInstance) {
       window.gameInstance.triggerSuperCinematic(this);
@@ -153,55 +173,49 @@ class Fighter3D {
     const s = this.config.superMove;
     const spawnX = this.pos.x + this.facing * 1.2;
     const spawnY = this.pos.y + 1.4;
-    const damage = 85; // Massive Ultimate attack damage!
+    const damage = 85;
 
-    if (s.type === 'projectile_swarm') {
-      for (let i = 0; i < 3; i++) {
-        setTimeout(() => {
-          if (!this.isDead && this.scene3D) {
-            this.scene3D.spawn3DSuperProjectile({
-              x: spawnX,
-              y: spawnY + (i - 1) * 0.3,
-              vx: (s.speed || 12) * this.facing,
-              damage: Math.round(damage / 3),
-              owner: this,
-              color: 0xff4757
-            });
-          }
-        }, i * 150);
-      }
-    } else if (s.type === 'teleport_rush') {
-      this.pos.x = opponent.pos.x + (opponent.facing === 1 ? -1.8 : 1.8);
-      this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
-      this.updateModelTransform();
+    // Launch heavy 3D projectile attack
+    const projGeo = new THREE.SphereGeometry(0.55, 12, 12);
+    const projMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(s.auraColor) });
+    const projMesh = new THREE.Mesh(projGeo, projMat);
+    projMesh.position.set(spawnX, spawnY, 0);
+    this.scene3D.scene.add(projMesh);
 
-      opponent.takeDamage(damage, this, true);
-      this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, this.pos.y + 1.4, 0), 0x70a1ff, 35);
-      this.scene3D.triggerShake(0.75);
-      if (window.soundEngine) window.soundEngine.playSuperHit();
-    } else {
-      this.scene3D.spawn3DSuperProjectile({
-        x: spawnX,
-        y: spawnY,
-        vx: (s.speed || 11) * this.facing,
-        damage: damage,
-        owner: this,
-        radius: 0.8,
-        color: 0xffa502
-      });
+    this.scene3D.projectiles3D.push({
+      mesh: projMesh,
+      vel: new THREE.Vector3(this.facing * s.speed, 0, 0),
+      owner: this,
+      damage: damage,
+      life: 2.5
+    });
+
+    if (this.scene3D) {
+      this.scene3D.spawn3DHitSparks(new THREE.Vector3(spawnX, spawnY, 0), 0xffa502, 25);
     }
   }
 
   canMove() {
-    return !['punch_1', 'punch_2', 'uppercut', 'kick_1', 'kick_2', 'grab', 'hit', 'knockdown', 'super_charge'].includes(this.state) && !this.isDead;
+    return !['punch_1', 'punch_2', 'uppercut', 'kick_1', 'kick_2', 'grab', 'hit', 'knockdown', 'super_charge', 'victory_dance'].includes(this.state) && !this.isDead;
   }
 
   canAttack() {
-    return !['hit', 'knockdown', 'super_charge'].includes(this.state) && !this.isDead;
+    return !['hit', 'knockdown', 'super_charge', 'victory_dance'].includes(this.state) && !this.isDead;
+  }
+
+  // --- AIRBORNE FLYING LAUNCH (FIGHTKARO UPPERCUT PHYSICS) ---
+  launchAirborne(facingDir) {
+    this.state = 'knockdown';
+    this.stateTimer = 0.95;
+    this.vel.y = 10.5; // High vertical launch
+    this.vel.x = -facingDir * 6.5; // Flying backward across the arena
+    this.isGrounded = false;
+    if (this.scene3D) this.scene3D.triggerShake(0.65);
+    if (Math.random() < 0.5) this.sayBubble("AAARGH! 💥", 1.8);
   }
 
   // --- DAMAGE & IMPACT ---
-  takeDamage(amount, attacker, isSuper = false) {
+  takeDamage(amount, attacker, isSuper = false, isUppercut = false) {
     if (this.isDead) return;
 
     if (this.isBlocking && !isSuper) {
@@ -215,9 +229,15 @@ class Fighter3D {
     }
 
     this.health = Math.max(0, this.health - amount);
-    this.state = amount > 30 ? 'knockdown' : 'hit';
-    this.stateTimer = amount > 30 ? 0.6 : 0.28;
-    this.vel.x = -this.facing * (amount > 30 ? 5.5 : 2.5);
+
+    // Uppercuts launch opponent high into the air!
+    if (isUppercut) {
+      this.launchAirborne(attacker.facing);
+    } else {
+      this.state = amount > 25 ? 'knockdown' : 'hit';
+      this.stateTimer = amount > 25 ? 0.65 : 0.28;
+      this.vel.x = -this.facing * (amount > 25 ? 5.5 : 2.5);
+    }
 
     // Super Meter Gain
     this.superMeter = Math.min(100, this.superMeter + 16);
@@ -227,11 +247,11 @@ class Fighter3D {
       attacker.comboTimer = 75;
     }
 
-    // BRINK OF HEALTH / RAGE COMEBACK MECHANIC:
-    // When HP drops below 35%, immediately fill Super meter to 100%!
+    // BRINK OF HEALTH / CRITICAL RAGE COMEBACK:
     if (!this.rageTriggered && this.health <= (this.maxHealth * 0.38) && this.health > 0) {
       this.rageTriggered = true;
-      this.superMeter = 100; // Instantly ready for the ultimate climax!
+      this.superMeter = 100;
+      this.sayBubble("SHAKTI OVERLOAD!! ⚡⚡", 2.5);
       if (this.scene3D) {
         this.scene3D.triggerShake(0.5);
         this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, this.pos.y + 1.2, 0), 0xff3838, 25);
@@ -249,8 +269,9 @@ class Fighter3D {
     this.isDead = true;
     this.state = 'knockdown';
     this.stateTimer = 999;
+    this.sayBubble("GHEE KHATAM... 😵", 3.0);
     if (window.soundEngine) window.soundEngine.playKOBell();
-    if (this.scene3D) this.scene3D.triggerShake(0.8);
+    if (this.scene3D) this.scene3D.triggerShake(0.85);
     if (window.gameInstance) window.gameInstance.onFighterKilled(this);
   }
 
@@ -262,13 +283,28 @@ class Fighter3D {
     this.pos.x += this.vel.x * delta;
     this.pos.y += this.vel.y * delta;
 
+    // Airborne Gravity & Ground Impact Bounce
     if (!this.isGrounded) {
       this.vel.y -= this.gravity * delta;
       if (this.pos.y <= 0) {
         this.pos.y = 0;
-        this.vel.y = 0;
-        this.isGrounded = true;
-        if (this.state === 'jump') this.state = 'idle';
+        if (this.state === 'knockdown') {
+          // Ground impact bounce
+          if (Math.abs(this.vel.y) > 4.5) {
+            this.vel.y = -this.vel.y * 0.35; // Bounce off the floor
+            if (this.scene3D) {
+              this.scene3D.triggerShake(0.35);
+              this.scene3D.spawn3DHitSparks(new THREE.Vector3(this.pos.x, 0.2, 0), 0xbdc3c7, 12);
+            }
+          } else {
+            this.vel.y = 0;
+            this.isGrounded = true;
+          }
+        } else {
+          this.vel.y = 0;
+          this.isGrounded = true;
+          if (this.state === 'jump') this.state = 'idle';
+        }
       }
     }
 
@@ -279,6 +315,15 @@ class Fighter3D {
       this.vel.x *= 0.78;
     }
 
+    // Comic Speech Bubble Timer
+    if (this.bubbleTimer > 0) {
+      this.bubbleTimer -= delta;
+      if (this.bubbleTimer <= 0) {
+        this.bubbleText = '';
+      }
+    }
+
+    // State Timer
     if (this.stateTimer > 0) {
       this.stateTimer -= delta;
 
@@ -291,7 +336,7 @@ class Fighter3D {
         this.checkAttackCollision(opponent);
       }
 
-      if (this.stateTimer <= 0 && !this.isDead) {
+      if (this.stateTimer <= 0 && !this.isDead && this.state !== 'victory_dance') {
         this.state = 'idle';
       }
     }
@@ -318,23 +363,28 @@ class Fighter3D {
     if (inFront && dist < range && heightDiff < 1.4) {
       this.hasHitOpponent = true;
       let damage = 10;
+      let isUppercut = false;
+
       if (this.state === 'punch_2') damage = 16;
-      if (this.state === 'uppercut') damage = 20;
+      if (this.state === 'uppercut') {
+        damage = 24;
+        isUppercut = true;
+      }
       if (this.state === 'kick_1') damage = 18;
       if (this.state === 'kick_2') damage = 15;
-      if (this.state === 'grab') damage = 24;
+      if (this.state === 'grab') damage = 25;
 
-      opponent.takeDamage(damage, this, false);
+      opponent.takeDamage(damage, this, false, isUppercut);
 
       const hitPos = new THREE.Vector3((this.pos.x + opponent.pos.x) / 2, this.pos.y + 1.4, 0);
       if (this.scene3D) {
         this.scene3D.spawn3DHitSparks(hitPos, this.isPlayer1 ? 0xff4757 : 0x3742fa, 22);
-        this.scene3D.triggerShake(isPunch ? 0.3 : 0.45);
+        this.scene3D.triggerShake(isUppercut ? 0.55 : (isPunch ? 0.3 : 0.45));
       }
 
       if (window.soundEngine) {
         if (isPunch) {
-          if (damage > 12) window.soundEngine.playPunchHeavy();
+          if (damage > 18) window.soundEngine.playPunchHeavy();
           else window.soundEngine.playPunchLight();
         } else {
           window.soundEngine.playKick();

@@ -13,7 +13,7 @@
     <!-- Top Floating Toolbar -->
     <div class="top-controls">
       <button id="btnMute" class="control-pill">🔊 SOUND ON</button>
-      <button id="btnHelp" class="control-pill" onclick="alert('🎮 FIGHTKARO 3D CONTROLS:\n• Move: A / D or ◀ / ▶\n• Jump: W or ▲\n• Crouch: S or ▼\n• Punch: J (Jab / Cross)\n• Kick: K (High Roundhouse)\n• Uppercut: S + J (Down + Punch)\n• Low Sweep: S + K (Down + Kick)\n• Grab & Throw: I or J+K\n• Block / Guard: Hold Back or H\n• Super Move: Space or L (when meter is 100%)\n\n📱 Mobile: Use virtual buttons on screen!')">❓ CONTROLS</button>
+      <button id="btnHelp" class="control-pill" onclick="alert('🎮 FIGHTKARO 3D CONTROLS:\n• Move: A / D or ◀ / ▶\n• Jump: W or ▲\n• Crouch: S or ▼\n• Punch: J (Jab / Cross)\n• Kick: K (High Roundhouse)\n• Uppercut: S + J (Down + Punch)\n• Low Sweep: S + K (Down + Kick)\n• Grab & Throw: I or J+K\n• Block / Guard: Hold Back or H\n• Super Move: Space or L (when Shakti meter is 100%)\n\n📱 Mobile: Use virtual buttons on screen!')">❓ CONTROLS</button>
     </div>
 
     <!-- 1. SCREEN: TITLE / START -->
@@ -69,10 +69,20 @@
 
     <!-- 3. IN-GAME 3D HUD OVERLAY -->
     <div id="gameHUD" class="hidden">
+      <!-- Top Status Bars -->
       <div class="hud-top-bar">
         <!-- Player 1 Status -->
         <div class="hud-fighter hud-p1">
-          <div id="hudP1Name" class="hud-name">Player 1</div>
+          <div class="hud-header-row">
+            <div id="hudP1Avatar" class="hud-avatar"></div>
+            <div class="hud-meta">
+              <div id="hudP1Name" class="hud-name">Player 1</div>
+              <div class="hud-rounds">
+                <span class="round-dot" id="p1Round1"></span>
+                <span class="round-dot" id="p1Round2"></span>
+              </div>
+            </div>
+          </div>
           <div class="hud-bar-container">
             <div id="hudP1Lag" class="hud-lag-bar" style="width: 100%;"></div>
             <div id="hudP1Health" class="hud-health-bar" style="width: 100%;"></div>
@@ -80,15 +90,27 @@
           <div class="hud-super-container">
             <div id="hudP1Super" class="hud-super-bar" style="width: 0%;"></div>
           </div>
-          <div id="hudP1SuperText" class="hud-super-text">SUPER: 0%</div>
+          <div id="hudP1SuperText" class="hud-super-text">SHAKTI: 0%</div>
         </div>
 
-        <!-- Center Timer -->
-        <div id="hudTimer" class="hud-timer-circle">60</div>
+        <!-- Center Match Timer -->
+        <div class="hud-center-cluster">
+          <div id="hudTimer" class="hud-timer-circle">60</div>
+          <div class="hud-pause-pill">||</div>
+        </div>
 
         <!-- Player 2 Status -->
-        <div class="hud-fighter hud-p2" style="align-items: flex-end;">
-          <div id="hudP2Name" class="hud-name">Player 2</div>
+        <div class="hud-fighter hud-p2">
+          <div class="hud-header-row" style="flex-direction: row-reverse;">
+            <div id="hudP2Avatar" class="hud-avatar"></div>
+            <div class="hud-meta" style="align-items: flex-end;">
+              <div id="hudP2Name" class="hud-name">Player 2</div>
+              <div class="hud-rounds">
+                <span class="round-dot" id="p2Round1"></span>
+                <span class="round-dot" id="p2Round2"></span>
+              </div>
+            </div>
+          </div>
           <div class="hud-bar-container">
             <div id="hudP2Lag" class="hud-lag-bar" style="width: 100%;"></div>
             <div id="hudP2Health" class="hud-health-bar" style="width: 100%;"></div>
@@ -96,14 +118,35 @@
           <div class="hud-super-container">
             <div id="hudP2Super" class="hud-super-bar" style="width: 0%;"></div>
           </div>
-          <div class="hud-super-text">SUPER 3D</div>
+          <div id="hudP2SuperText" class="hud-super-text">SHAKTI: 0%</div>
         </div>
       </div>
+
+      <!-- Combo Hit Counter on Side -->
+      <div id="hudCombo" class="hud-combo hidden">2 HITS!</div>
+
+      <!-- Comic Speech Bubbles Floating Over Fighters in 3D -->
+      <div id="speechBubbleP1" class="speech-bubble hidden"></div>
+      <div id="speechBubbleP2" class="speech-bubble hidden"></div>
 
       <!-- Super Move Cinematic Banner -->
       <div id="superBanner" class="hidden">
         <div id="superMoveTitle">⚡ SUPER MOVE ⚡</div>
         <div id="superMoveShout">"BATTLE CRY"</div>
+      </div>
+
+      <!-- Bold Dramatic K.O. Announcement -->
+      <div id="koOverlayText" class="ko-overlay-text hidden">GHEE KHATAM!</div>
+
+      <!-- FightKaro-Style Live Broadcast Ticker -->
+      <div id="liveTicker" class="live-ticker">
+        <div class="ticker-badge">● LIVE</div>
+        <div class="ticker-channel">BREAKING BAKWAS: GANG SHOWDOWN BATTLEGROUND</div>
+        <div class="ticker-marquee">
+          <span class="ticker-text">
+            Auditors confirm: Uppercut velocity exceeding speed limits! • Fans demanding rematch in every sector! • Public asks: Is the ghee really khatam? • Stay tuned for the ultimate champion showdown! •
+          </span>
+        </div>
       </div>
     </div>
 
@@ -145,7 +188,6 @@
 
   <!-- 3D Engine & Scripts -->
   <script src="js/libs/three.min.js"></script>
-  <script src="js/libs/GLTFLoader.js"></script>
   <script src="js/characters.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/engine/input.js"></script>

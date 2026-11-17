@@ -546,3 +546,229 @@ select {
   border-radius: 4px;
   font-family: monospace;
 }
+
+
+/* ===================================================================
+   FIGHTKARO ARENA HUD, COMIC SPEECH BUBBLES & BROADCAST TICKER
+=================================================================== */
+
+/* Comic Speech Bubble */
+.speech-bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: #ffffff;
+  color: #1e272e;
+  font-family: 'Inter', sans-serif;
+  font-weight: 900;
+  font-size: clamp(13px, 1.6vw, 17px);
+  padding: 8px 16px;
+  border-radius: 14px;
+  border: 3px solid #2f3542;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+  text-align: center;
+  transition: opacity 0.2s ease;
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 8px 0;
+  border-style: solid;
+  border-color: #2f3542 transparent;
+  display: block;
+  width: 0;
+}
+
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 7px 6px 0;
+  border-style: solid;
+  border-color: #ffffff transparent;
+  display: block;
+  width: 0;
+  z-index: 1;
+}
+
+/* Golden Health Bar Gradient */
+.hud-health-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(180deg, #f9ca24 0%, #f0932b 50%, #eb4d4b 100%);
+  border-radius: 4px;
+  transition: width 0.1s linear;
+}
+
+/* Fighter Header Row with Avatar & Win Indicators */
+.hud-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.hud-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid #f1c40f;
+  background-size: cover;
+  background-position: center;
+  background-color: #2f3542;
+  box-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+  flex-shrink: 0;
+}
+
+.hud-rounds {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.round-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ced6e0;
+  background: transparent;
+}
+
+.round-dot.won {
+  background: #f1c40f;
+  border-color: #f1c40f;
+  box-shadow: 0 0 8px #f1c40f;
+}
+
+/* Center Timer Cluster */
+.hud-center-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.hud-pause-pill {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* Combo Hit Counter */
+.hud-combo {
+  position: absolute;
+  top: 22%;
+  left: 40px;
+  font-family: 'Bungee', cursive, Impact;
+  font-size: clamp(28px, 4vw, 48px);
+  color: #f1c40f;
+  text-shadow: 3px 3px 0 #c0392b, 5px 5px 0 #000;
+  pointer-events: none;
+  z-index: 22;
+  animation: comboPop 0.25s ease-out;
+}
+
+@keyframes comboPop {
+  0% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Bold Dramatic K.O. Announcement */
+.ko-overlay-text {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%) skewX(-8deg);
+  font-family: 'Bungee', cursive, Impact;
+  font-size: clamp(48px, 9vw, 96px);
+  color: #ffffff;
+  text-shadow: 5px 5px 0 #c0392b, 10px 10px 0 #000000;
+  pointer-events: none;
+  z-index: 30;
+  animation: koZoom 0.45s ease-out;
+  letter-spacing: 2px;
+}
+
+@keyframes koZoom {
+  0% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1) skewX(-8deg); opacity: 1; }
+}
+
+/* Bottom Live Broadcast Ticker */
+.live-ticker {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 32px;
+  background: #000000;
+  border-top: 2px solid #e74c3c;
+  display: flex;
+  align-items: center;
+  z-index: 15;
+  overflow: hidden;
+}
+
+.ticker-badge {
+  background: #e74c3c;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 11px;
+  padding: 0 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  letter-spacing: 1px;
+  animation: liveBlink 1.2s infinite;
+}
+
+@keyframes liveBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.ticker-channel {
+  background: #2c3e50;
+  color: #f1c40f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.ticker-marquee {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ticker-text {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 25s linear infinite;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ecf0f1;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}

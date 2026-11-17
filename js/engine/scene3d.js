@@ -1,21 +1,29 @@
 /**
  * ===================================================================
- *  3D ARENA & CINEMATIC FIGHT STAGE (Three.js)
+ *  FIGHTKARO-STYLE 3D FESTIVE ARENA & CINEMATIC STAGE (Three.js)
  * ===================================================================
- *  Clean, open fighting stage (NO boxing ring, NO ropes).
- *  Atmospheric lighting, polished floor, shadows, and dynamic camera.
+ *  Authentic FightKaro arena environment:
+ *    - Checkered sandstone tiled arena floor
+ *    - Central vibrant floral Rangoli Mandala battle emblem
+ *    - Warm glowing earthen lamps (diyas/candles) along the perimeter
+ *    - Grand classical stone colonnade rotunda with pillars in the background
+ *    - Colorful audience crowd holding rally & satirical signboards
+ *    - Floating festive firework embers and celebratory sparks
+ *    - Dynamic tracking camera with zoom framing and impact shake
+ *    - 3D to 2D screen projection helper for comic speech bubbles!
+ * ===================================================================
  */
 
 class GameScene3D {
   constructor(container) {
     this.container = container;
 
-    // 1. Scene with atmospheric fog
+    // 1. Scene with atmospheric evening twilight fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0c12);
-    this.scene.fog = new THREE.FogExp2(0x0a0c12, 0.02);
+    this.scene.background = new THREE.Color(0x130f26); // Deep royal purple twilight
+    this.scene.fog = new THREE.FogExp2(0x130f26, 0.018);
 
-    // 2. Camera (Wide dynamic 3D fighting game camera)
+    // 2. Camera (Wide dynamic tracking perspective)
     this.camera = new THREE.PerspectiveCamera(
       42,
       window.innerWidth / window.innerHeight,
@@ -35,26 +43,29 @@ class GameScene3D {
     this.container.appendChild(this.renderer.domElement);
 
     this.cameraShake = 0;
+    this.targetCameraPos = new THREE.Vector3(0, 3.2, 13.5);
+    this.targetLookAt = new THREE.Vector3(0, 1.8, 0);
 
     // 4. Lighting & Stage
     this.setupLighting();
-    this.buildOpenStage();
+    this.buildFestiveArena();
 
     // 5. Particles & 3D Projectiles
     this.particles = [];
     this.projectiles3D = [];
+    this.diyas = [];
 
     window.addEventListener('resize', () => this.onResize());
   }
 
   setupLighting() {
-    // Ambient Light
-    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+    // Ambient Light (Warm festive glow)
+    const ambient = new THREE.AmbientLight(0xfff0e6, 0.65);
     this.scene.add(ambient);
 
-    // Key Overhead Light (Casts soft human shadows)
-    this.mainLight = new THREE.DirectionalLight(0xfff6e6, 1.4);
-    this.mainLight.position.set(3, 16, 9);
+    // Key Overhead Light (Casts soft directional human shadows)
+    this.mainLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+    this.mainLight.position.set(4, 16, 9);
     this.mainLight.castShadow = true;
     this.mainLight.shadow.mapSize.width = 2048;
     this.mainLight.shadow.mapSize.height = 2048;
@@ -67,259 +78,431 @@ class GameScene3D {
     this.mainLight.shadow.bias = -0.0004;
     this.scene.add(this.mainLight);
 
-    // Rim / Backlight for dramatic character silhouettes
-    const rimLight = new THREE.DirectionalLight(0x70a1ff, 0.8);
-    rimLight.position.set(-5, 8, -8);
+    // Atmospheric Backlight / Rim
+    const rimLight = new THREE.DirectionalLight(0xf368e0, 0.7);
+    rimLight.position.set(-6, 9, -9);
     this.scene.add(rimLight);
-
-    // P1 Warm Red Accent Glow
-    this.p1Glow = new THREE.PointLight(0xff4757, 1.2, 22);
-    this.p1Glow.position.set(-10, 4, 3);
-    this.scene.add(this.p1Glow);
-
-    // P2 Electric Blue Accent Glow
-    this.p2Glow = new THREE.PointLight(0x3742fa, 1.2, 22);
-    this.p2Glow.position.set(10, 4, 3);
-    this.scene.add(this.p2Glow);
   }
 
-  // --- OPEN STAGE (NO RINGS, NO ROPES, CLEAN VIEW) ---
-  buildOpenStage() {
-    // 1. Polished Fighting Platform (Wide, sleek stone & asphalt slab)
+  // ===================================================================
+  // BUILD FESTIVE ARENA (RANGOLI FLOOR, DIYAS, COLONNADE, CROWD)
+  // ===================================================================
+  buildFestiveArena() {
     const stageWidth = 26;
     const stageDepth = 12;
     const stageThickness = 0.6;
 
-    const platformGeo = new THREE.BoxGeometry(stageWidth, stageThickness, stageDepth);
+    // 1. Checkered Sandstone Floor Texture
+    const floorCanvas = document.createElement('canvas');
+    floorCanvas.width = 512;
+    floorCanvas.height = 512;
+    const fctx = floorCanvas.getContext('2d');
+    const tileSize = 64;
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        fctx.fillStyle = (r + c) % 2 === 0 ? '#e0d5c1' : '#c7b299';
+        fctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+        // Subtle tile seam border
+        fctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+        fctx.lineWidth = 2;
+        fctx.strokeRect(c * tileSize, r * tileSize, tileSize, tileSize);
+      }
+    }
+    const floorTexture = new THREE.CanvasTexture(floorCanvas);
+    floorTexture.wrapS = THREE.RepeatWrapping;
+    floorTexture.wrapT = THREE.RepeatWrapping;
+    floorTexture.repeat.set(6, 3);
+
     const platformMat = new THREE.MeshStandardMaterial({
-      color: 0x181d26,
-      roughness: 0.55,
-      metalness: 0.25
+      map: floorTexture,
+      roughness: 0.65,
+      metalness: 0.1
     });
-    this.platform = new THREE.Mesh(platformGeo, platformMat);
+
+    this.platform = new THREE.Mesh(
+      new THREE.BoxGeometry(stageWidth, stageThickness, stageDepth),
+      platformMat
+    );
     this.platform.position.y = -stageThickness / 2;
     this.platform.receiveShadow = true;
     this.scene.add(this.platform);
 
-    // 2. Stage Edge Neon Accent Lines (Sleek sci-fi / street brawler styling)
-    const edgeFrontGeo = new THREE.BoxGeometry(stageWidth, 0.06, 0.1);
-    const edgeFrontMat = new THREE.MeshBasicMaterial({ color: 0xffa502 });
-    const edgeFront = new THREE.Mesh(edgeFrontGeo, edgeFrontMat);
-    edgeFront.position.set(0, 0.01, stageDepth / 2);
-    this.scene.add(edgeFront);
+    // 2. Central Rangoli Mandala Battle Emblem
+    this.buildRangoliMandala();
 
-    const edgeBack = new THREE.Mesh(edgeFrontGeo, new THREE.MeshBasicMaterial({ color: 0x00f2fe }));
-    edgeBack.position.set(0, 0.01, -stageDepth / 2);
-    this.scene.add(edgeBack);
+    // 3. Earthen Clay Lamps (Diyas) along the stage perimeter
+    this.buildPerimeterDiyas(stageWidth, stageDepth);
 
-    // 3. Ground Arena Floor Below Stage
+    // 4. Grand Classical Colonnade Rotunda (Pillars & Lanterns)
+    this.buildBackgroundColonnade();
+
+    // 5. Crowd with Placards & Signboards
+    this.buildSpectatorCrowd();
+
+    // 6. Ground below stage
     const groundGeo = new THREE.PlaneGeometry(120, 80);
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x080a0f,
-      roughness: 0.95
-    });
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a0c14, roughness: 0.95 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -stageThickness - 0.05;
     ground.receiveShadow = true;
     this.scene.add(ground);
-
-    // 4. Background City Skyline & Street Pillars
-    this.buildAtmosphericBackground();
   }
 
-  buildAtmosphericBackground() {
-    // Distant City Silhouettes / Architecture
-    const bldgMat = new THREE.MeshStandardMaterial({
-      color: 0x0d121c,
-      roughness: 0.9
-    });
+  // --- PROCEDURAL VIBRANT RANGOLI MANDALA EMBLEM ---
+  buildRangoliMandala() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    const cx = 512;
+    const cy = 512;
 
-    const buildingDefs = [
-      { x: -28, z: -25, w: 10, h: 28, d: 8 },
-      { x: -16, z: -22, w: 8, h: 22, d: 8 },
-      { x: -6, z: -28, w: 12, h: 35, d: 8 },
-      { x: 8, z: -24, w: 9, h: 26, d: 8 },
-      { x: 19, z: -26, w: 11, h: 30, d: 8 },
-      { x: 30, z: -22, w: 8, h: 20, d: 8 }
-    ];
-
-    buildingDefs.forEach(b => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bldgMat);
-      mesh.position.set(b.x, b.h / 2 - 4, b.z);
-      this.scene.add(mesh);
-
-      // Random glowing windows
-      if (Math.random() < 0.8) {
-        const winGeo = new THREE.PlaneGeometry(b.w * 0.7, 0.4);
-        const winMat = new THREE.MeshBasicMaterial({ color: 0xfffa65 });
-        const win = new THREE.Mesh(winGeo, winMat);
-        win.position.set(b.x, b.h * 0.6, b.z + b.d / 2 + 0.05);
-        this.scene.add(win);
+    // Draw concentric festive floral rings
+    const drawFlowerRing = (radius, numPetals, petalLength, color, strokeColor) => {
+      ctx.fillStyle = color;
+      ctx.strokeStyle = strokeColor || '#ffffff';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < numPetals; i++) {
+        const angle = (i * 2 * Math.PI) / numPetals;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy + Math.sin(angle) * radius;
+        ctx.beginPath();
+        ctx.arc(px, py, petalLength, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
+    };
+
+    // Outer decorative scallops (Golden Yellow)
+    drawFlowerRing(380, 24, 75, '#f1c40f', '#f39c12');
+    // Second ring (Vivid Royal Blue)
+    drawFlowerRing(300, 20, 65, '#2980b9', '#1abc9c');
+    // Third ring (Hot Magenta / Pink)
+    drawFlowerRing(220, 16, 55, '#e84393', '#fd79a8');
+    // Fourth ring (Bright Spring Green)
+    drawFlowerRing(140, 12, 45, '#2ecc71', '#27ae60');
+
+    // Central Sun / Lotus Disc
+    ctx.beginPath();
+    ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+    ctx.fillStyle = '#e67e22';
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#f1c40f';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 45, 0, Math.PI * 2);
+    ctx.fillStyle = '#f39c12';
+    ctx.fill();
+
+    const mandalaTex = new THREE.CanvasTexture(canvas);
+    const mandalaGeo = new THREE.PlaneGeometry(9.5, 9.5);
+    const mandalaMat = new THREE.MeshBasicMaterial({
+      map: mandalaTex,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false
     });
-
-    // Street Lamps with warm amber lights
-    [-11, 11].forEach(x => {
-      const poleGeo = new THREE.CylinderGeometry(0.08, 0.1, 7.5, 8);
-      const poleMat = new THREE.MeshStandardMaterial({ color: 0x3d4451 });
-      const pole = new THREE.Mesh(poleGeo, poleMat);
-      pole.position.set(x, 3.75, -5.5);
-      pole.castShadow = true;
-      this.scene.add(pole);
-
-      const lampLight = new THREE.PointLight(0xffc048, 1.2, 14);
-      lampLight.position.set(x, 7.5, -5.2);
-      this.scene.add(lampLight);
-
-      const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd32a }));
-      lampHead.position.set(x, 7.5, -5.2);
-      this.scene.add(lampHead);
-    });
+    const mandalaMesh = new THREE.Mesh(mandalaGeo, mandalaMat);
+    mandalaMesh.rotation.x = -Math.PI / 2;
+    mandalaMesh.position.set(0, 0.02, 0);
+    this.scene.add(mandalaMesh);
   }
 
-  // --- DYNAMIC 3D CAMERA TRACKING ---
+  // --- EARTHEN DIYAS / CLAY LAMPS ALONG STAGE RIM ---
+  buildPerimeterDiyas(stageW, stageD) {
+    const numDiyas = 14;
+    const clayMat = new THREE.MeshStandardMaterial({ color: 0x8c4627, roughness: 0.8 });
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa502 });
+
+    for (let i = 0; i < numDiyas; i++) {
+      const x = -stageW * 0.44 + (i / (numDiyas - 1)) * stageW * 0.88;
+      const z = stageD * 0.46;
+
+      const diyaGroup = new THREE.Group();
+      diyaGroup.position.set(x, 0.04, z);
+
+      // Clay bowl
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.08, 0.08, 8), clayMat);
+      bowl.castShadow = true;
+      diyaGroup.add(bowl);
+
+      // Flame sphere
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), flameMat);
+      flame.scale.set(0.8, 1.4, 0.8);
+      flame.position.y = 0.08;
+      diyaGroup.add(flame);
+
+      this.scene.add(diyaGroup);
+      this.diyas.push(flame);
+    }
+
+    // Warm ambient perimeter point light
+    const diyaLight = new THREE.PointLight(0xff9f1a, 1.2, 18);
+    diyaLight.position.set(0, 1.2, stageD * 0.45);
+    this.scene.add(diyaLight);
+  }
+
+  // --- BACKGROUND GRAND COLONNADE ROTUNDA ---
+  buildBackgroundColonnade() {
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0x8a6d4b, // Warm classical sandstone
+      roughness: 0.75,
+      metalness: 0.1
+    });
+
+    const numPillars = 14;
+    const radius = 18;
+    const pillarHeight = 14;
+
+    for (let i = 0; i < numPillars; i++) {
+      const angle = Math.PI * 0.15 + (i / (numPillars - 1)) * Math.PI * 0.7;
+      const x = Math.cos(angle) * radius;
+      const z = -Math.sin(angle) * radius * 0.75 - 6;
+
+      const col = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.65, pillarHeight, 14),
+        pillarMat
+      );
+      col.position.set(x, pillarHeight / 2 - 1, z);
+      col.castShadow = true;
+      col.receiveShadow = true;
+      this.scene.add(col);
+
+      // Hanging celebratory lantern (Kandil) on alternate pillars
+      if (i % 2 === 1) {
+        const lanternMat = new THREE.MeshBasicMaterial({
+          color: i % 4 === 1 ? 0xff4757 : 0x00d2d3
+        });
+        const lantern = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.45, 0),
+          lanternMat
+        );
+        lantern.position.set(x, 7.5, z + 0.8);
+        this.scene.add(lantern);
+      }
+    }
+
+    // Upper Colonnade Arch Dome Header
+    const archRoof = new THREE.Mesh(
+      new THREE.TorusGeometry(radius * 0.88, 0.65, 8, 24, Math.PI * 0.75),
+      pillarMat
+    );
+    archRoof.rotation.x = Math.PI / 2;
+    archRoof.rotation.z = Math.PI * 0.12;
+    archRoof.position.set(0, pillarHeight - 1, -12);
+    this.scene.add(archRoof);
+  }
+
+  // --- SPECTATOR CROWD & SATIRICAL PLACARDS ---
+  buildSpectatorCrowd() {
+    const crowdMatColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
+    const placardTexts = ['VOTE!', 'BADLAV', 'SUNO!', 'POWER!', 'JAI HIND', 'GANG!'];
+
+    const spawnCrowdSide = (baseX, zMin, zMax) => {
+      for (let i = 0; i < 18; i++) {
+        const x = baseX + (Math.random() - 0.5) * 4;
+        const z = zMin + Math.random() * (zMax - zMin);
+
+        // Crowd silhouette capsule
+        const color = crowdMatColors[i % crowdMatColors.length];
+        const person = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.28, 0.28, 1.6, 8),
+          new THREE.MeshStandardMaterial({ color: color, roughness: 0.9 })
+        );
+        person.position.set(x, 0.8, z);
+        person.castShadow = true;
+        this.scene.add(person);
+
+        // Head
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 8, 8),
+          new THREE.MeshStandardMaterial({ color: 0x576574, roughness: 0.8 })
+        );
+        head.position.set(x, 1.8, z);
+        this.scene.add(head);
+
+        // Signboard Placard on some spectators
+        if (i % 3 === 0) {
+          const signCanvas = document.createElement('canvas');
+          signCanvas.width = 256;
+          signCanvas.height = 128;
+          const sctx = signCanvas.getContext('2d');
+          sctx.fillStyle = '#ffffff';
+          sctx.fillRect(0, 0, 256, 128);
+          sctx.strokeStyle = '#2c3e50';
+          sctx.lineWidth = 8;
+          sctx.strokeRect(4, 4, 248, 120);
+          sctx.fillStyle = '#c0392b';
+          sctx.font = 'bold 36px sans-serif';
+          sctx.textAlign = 'center';
+          sctx.textBaseline = 'middle';
+          sctx.fillText(placardTexts[i % placardTexts.length], 128, 64);
+
+          const signTex = new THREE.CanvasTexture(signCanvas);
+          const sign = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.2, 0.6),
+            new THREE.MeshBasicMaterial({ map: signTex })
+          );
+          sign.position.set(x, 2.6, z);
+          sign.rotation.y = baseX < 0 ? 0.35 : -0.35;
+          this.scene.add(sign);
+        }
+      }
+    };
+
+    spawnCrowdSide(-16, -2, 5); // Left audience
+    spawnCrowdSide(16, -2, 5);  // Right audience
+  }
+
+  // --- 3D TO 2D SCREEN PROJECTION HELPER (FOR COMIC SPEECH BUBBLES) ---
+  toScreenPosition(worldPos) {
+    const vector = worldPos.clone().project(this.camera);
+    return {
+      x: (vector.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-vector.y * 0.5 + 0.5) * window.innerHeight
+    };
+  }
+
+  // --- DYNAMIC CAMERA TRACKING & CINEMATIC FRAMING ---
   updateCamera(p1Pos, p2Pos, isCinematic = false) {
+    // Center point between the two fighters
     const midX = (p1Pos.x + p2Pos.x) / 2;
     const midY = (p1Pos.y + p2Pos.y) / 2;
     const dist = Math.abs(p1Pos.x - p2Pos.x);
 
-    let targetZ = 8.5 + dist * 0.55;
-    let targetY = 2.8 + dist * 0.1;
-    let targetX = midX * 0.75;
+    // Camera zooms in when close, pulls back when far
+    const targetZ = Math.max(10.5, Math.min(16.5, 9.5 + dist * 0.45));
+    const targetY = Math.max(2.8, 2.5 + midY * 0.4);
 
     if (isCinematic) {
-      targetZ = 5.2;
-      targetY = 2.0;
-      targetX = p1Pos.x * 0.85;
+      this.targetCameraPos.set(midX, targetY - 0.2, targetZ - 3.5);
+    } else {
+      this.targetCameraPos.set(midX * 0.55, targetY, targetZ);
     }
 
-    this.camera.position.x += (targetX - this.camera.position.x) * 0.08;
-    this.camera.position.y += (targetY - this.camera.position.y) * 0.08;
-    this.camera.position.z += (targetZ - this.camera.position.z) * 0.08;
+    this.targetLookAt.set(midX, midY + 1.6, 0);
 
-    if (this.cameraShake > 0.01) {
+    // Smooth lerp
+    this.camera.position.lerp(this.targetCameraPos, 0.08);
+    this.camera.lookAt(this.targetLookAt);
+
+    // Apply Camera Shake
+    if (this.cameraShake > 0) {
       this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
       this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
       this.cameraShake *= 0.88;
-    } else {
-      this.cameraShake = 0;
+      if (this.cameraShake < 0.01) this.cameraShake = 0;
     }
 
-    this.camera.lookAt(midX, midY + 1.25, 0);
-  }
-
-  triggerShake(intensity = 0.45) {
-    this.cameraShake = Math.max(this.cameraShake, intensity);
-  }
-
-  // --- 3D PARTICLES ---
-  spawn3DHitSparks(pos, color = 0xffdd59, count = 20) {
-    for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.06 + Math.random() * 0.06, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ color: color });
-      const p = new THREE.Mesh(geo, mat);
-      p.position.copy(pos);
-
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 3.5 + Math.random() * 6.5;
-      this.scene.add(p);
-
-      this.particles.push({
-        mesh: p,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed + 2.5,
-        vz: (Math.random() - 0.5) * 4,
-        life: 1.0,
-        decay: 0.05 + Math.random() * 0.04
-      });
-    }
-  }
-
-  spawn3DSuperProjectile(options) {
-    const group = new THREE.Group();
-    group.position.set(options.x, options.y, options.z || 0);
-
-    const coreGeo = new THREE.SphereGeometry(options.radius || 0.48, 14, 14);
-    const coreMat = new THREE.MeshBasicMaterial({ color: options.color || 0xff4757 });
-    const core = new THREE.Mesh(coreGeo, coreMat);
-    group.add(core);
-
-    const light = new THREE.PointLight(options.color || 0xff4757, 2.5, 9);
-    group.add(light);
-
-    this.scene.add(group);
-
-    this.projectiles3D.push({
-      group: group,
-      vx: options.vx,
-      damage: options.damage,
-      owner: options.owner,
-      color: options.color,
-      lifespan: 140,
-      radius: options.radius || 0.48
+    // Subtle flicker on perimeter diya flames
+    const time = Date.now() * 0.008;
+    this.diyas.forEach((flame, idx) => {
+      const flicker = 1.0 + Math.sin(time + idx * 1.5) * 0.15;
+      flame.scale.set(0.8 * flicker, 1.4 * flicker, 0.8 * flicker);
     });
   }
 
-  updateProjectiles(fighters) {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.mesh.position.x += p.vx * 0.016;
-      p.mesh.position.y += p.vy * 0.016;
-      p.mesh.position.z += p.vz * 0.016;
-      p.vy -= 9.8 * 0.016;
-      p.life -= p.decay;
+  triggerShake(intensity = 0.5) {
+    this.cameraShake = Math.max(this.cameraShake, intensity);
+  }
 
-      p.mesh.scale.setScalar(Math.max(0.001, p.life));
+  spawn3DHitSparks(pos, color = 0xffa502, count = 15) {
+    const sparkGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = [];
 
-      if (p.life <= 0) {
-        this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        p.mesh.material.dispose();
-        this.particles.splice(i, 1);
-      }
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = pos.x;
+      positions[i * 3 + 1] = pos.y;
+      positions[i * 3 + 2] = pos.z;
+
+      velocities.push(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.2) * 8,
+          (Math.random() - 0.5) * 4
+        )
+      );
     }
 
-    for (let i = this.projectiles3D.length - 1; i >= 0; i--) {
-      const proj = this.projectiles3D[i];
-      proj.group.position.x += proj.vx * 0.016;
-      proj.lifespan--;
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: color,
+      size: 0.25,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending
+    });
 
-      if (Math.random() < 0.6) {
-        this.spawn3DHitSparks(proj.group.position, proj.color, 2);
+    const pSystem = new THREE.Points(sparkGeo, sparkMat);
+    this.scene.add(pSystem);
+    this.particles.push({ system: pSystem, velocities: velocities, life: 0.35, maxLife: 0.35 });
+  }
+
+  updateProjectiles(fighters) {
+    const delta = 0.016;
+
+    // Update Particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= delta;
+      if (p.life <= 0) {
+        this.scene.remove(p.system);
+        this.particles.splice(i, 1);
+        continue;
       }
 
-      fighters.forEach(target => {
-        if (target !== proj.owner && !target.isDead) {
-          const dx = proj.group.position.x - target.pos.x;
-          const dy = proj.group.position.y - (target.pos.y + 1.2);
-          const dist = Math.hypot(dx, dy);
+      const pos = p.system.geometry.attributes.position;
+      const decay = p.life / p.maxLife;
+      p.system.material.opacity = decay;
 
-          if (dist < proj.radius + 0.65) {
-            target.takeDamage(proj.damage, proj.owner, true);
-            this.spawn3DHitSparks(proj.group.position, proj.color, 32);
-            this.triggerShake(0.65);
-            if (window.soundEngine) window.soundEngine.playSuperHit();
-            proj.lifespan = 0;
-          }
+      for (let j = 0; j < p.velocities.length; j++) {
+        pos.setX(j, pos.getX(j) + p.velocities[j].x * delta);
+        pos.setY(j, pos.getY(j) + p.velocities[j].y * delta);
+        pos.setZ(j, pos.getZ(j) + p.velocities[j].z * delta);
+        p.velocities[j].y -= 9.8 * delta;
+      }
+      pos.needsUpdate = true;
+    }
+
+    // Update 3D Projectiles
+    for (let i = this.projectiles3D.length - 1; i >= 0; i--) {
+      const proj = this.projectiles3D[i];
+      proj.mesh.position.addScaledVector(proj.vel, delta);
+      proj.life -= delta;
+
+      // Hit checks
+      const target = fighters.find(f => f !== proj.owner);
+      if (target && !target.isDead) {
+        const d = proj.mesh.position.distanceTo(new THREE.Vector3(target.pos.x, target.pos.y + 1.4, 0));
+        if (d < 1.3) {
+          target.takeDamage(proj.damage, proj.owner, true);
+          this.spawn3DHitSparks(proj.mesh.position, 0xff3838, 30);
+          this.triggerShake(0.65);
+          this.scene.remove(proj.mesh);
+          this.projectiles3D.splice(i, 1);
+          continue;
         }
-      });
+      }
 
-      if (proj.lifespan <= 0 || Math.abs(proj.group.position.x) > 16) {
-        this.scene.remove(proj.group);
+      if (proj.life <= 0) {
+        this.scene.remove(proj.mesh);
         this.projectiles3D.splice(i, 1);
       }
     }
-  }
-
-  render() {
-    this.renderer.render(this.scene, this.camera);
   }
 
   onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  render() {
+    this.renderer.render(this.scene, this.camera);
   }
 }
 

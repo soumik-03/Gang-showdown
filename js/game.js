@@ -1,6 +1,12 @@
 /**
  * ===================================================================
- *  MAIN 3D GAME APP & ORCHESTRATOR
+ *  MAIN 3D GAME APP & ORCHESTRATOR (FightKaro Style)
+ * ===================================================================
+ *  - 3D scene orchestration with festive arena & tracking camera
+ *  - Real-time comic speech bubble projection over 3D fighter heads
+ *  - Dynamic combo hit counter & "Ghee Khatam" knockout announcements
+ *  - Golden health bars with round win dots & Shakti super meter
+ *  - Post-fight victory dance celebration
  * ===================================================================
  */
 
@@ -21,7 +27,7 @@ class GameApp3D {
     this.gameMode = 'cpu';
     this.aiDifficulty = 'medium';
 
-    // Active Fighters (Created immediately so they are visible right on the stage!)
+    // Active Fighters
     this.p1 = new Fighter3D(this.scene3D, this.p1Char, -2.8, true);
     this.p2 = new Fighter3D(this.scene3D, this.p2Char, 2.8, false);
     this.ai = null;
@@ -31,7 +37,7 @@ class GameApp3D {
     this.loser = null;
     this.stateTimer = 0;
 
-    // Smooth Health Lag Bars (Calculated as % of maxHealth)
+    // Smooth Health Lag Bars
     this.p1LagHealth = 100;
     this.p2LagHealth = 100;
 
@@ -99,18 +105,17 @@ class GameApp3D {
       }
       this.activeSelectSlot = 'p2';
 
-      // Update P1 3D model immediately on stage!
       if (this.p1) this.p1.destroy();
       this.p1 = new Fighter3D(this.scene3D, this.p1Char, -2.8, true);
     } else {
       this.p2Char = char;
       this.activeSelectSlot = 'p1';
 
-      // Update P2 3D model immediately on stage!
       if (this.p2) this.p2.destroy();
       this.p2 = new Fighter3D(this.scene3D, this.p2Char, 2.8, false);
     }
     this.updateCharacterPreview();
+    if (window.soundEngine) window.soundEngine.playSelect();
   }
 
   updateCharacterPreview() {
@@ -152,6 +157,9 @@ class GameApp3D {
     document.getElementById('mobileControls').classList.remove('hidden');
     document.getElementById('gameHUD').classList.remove('hidden');
 
+    const koOverlay = document.getElementById('koOverlayText');
+    if (koOverlay) koOverlay.classList.add('hidden');
+
     // Reset fighters to battle positions with full HP
     if (this.p1) this.p1.destroy();
     if (this.p2) this.p2.destroy();
@@ -170,9 +178,18 @@ class GameApp3D {
     this.loser = null;
     this.state = 'FIGHT';
 
-    // HUD Names
-    document.getElementById('hudP1Name').textContent = `${this.p1.name} "${this.p1.config.nickname}"`;
-    document.getElementById('hudP2Name').textContent = `"${this.p2.config.nickname}" ${this.p2.name}`;
+    // HUD Names & Avatars
+    document.getElementById('hudP1Name').textContent = `${this.p1.name}`;
+    document.getElementById('hudP2Name').textContent = `${this.p2.name}`;
+
+    const av1 = document.getElementById('hudP1Avatar');
+    if (av1 && this.p1Char.avatar) av1.style.backgroundImage = `url(${this.p1Char.avatar})`;
+    const av2 = document.getElementById('hudP2Avatar');
+    if (av2 && this.p2Char.avatar) av2.style.backgroundImage = `url(${this.p2Char.avatar})`;
+
+    // Starting Comic Speech Bubbles
+    this.p1.sayBubble(this.p1.config.quotes.intro, 3.2);
+    this.p2.sayBubble(this.p2.config.quotes.intro, 3.2);
 
     if (window.soundEngine) {
       window.soundEngine.playKOBell();
@@ -196,14 +213,26 @@ class GameApp3D {
     setTimeout(() => {
       banner.classList.add('hidden');
       this.superCinematic.active = false;
-    }, 1000);
+    }, 1100);
   }
 
   onFighterKilled(loser) {
     this.state = 'KO';
     this.loser = loser;
     this.winner = loser === this.p1 ? this.p2 : this.p1;
-    this.stateTimer = 2.2;
+    this.stateTimer = 2.8;
+
+    // Winner does the FightKaro celebratory victory dance!
+    this.winner.state = 'victory_dance';
+    this.winner.stateTimer = 999;
+    this.winner.sayBubble(this.winner.config.quotes.win || "BALLE BALLE! 🏆", 3.2);
+
+    // Show big bold K.O. Announcement
+    const koText = document.getElementById('koOverlayText');
+    if (koText) {
+      koText.textContent = "GHEE KHATAM!";
+      koText.classList.remove('hidden');
+    }
   }
 
   showVictoryScreen() {
@@ -217,6 +246,56 @@ class GameApp3D {
     document.getElementById('vicWinnerTitle').textContent = `🏆 ${this.winner.name} WINS! 🏆`;
     document.getElementById('vicQuote').textContent = `"${this.winner.config.quotes.win}"`;
     document.getElementById('vicRoast').textContent = `Roast: "${this.winner.config.quotes.roast}"`;
+  }
+
+  // --- COMIC SPEECH BUBBLES FLOATING OVER FIGHTERS IN 3D ---
+  updateSpeechBubbles() {
+    const bubble1 = document.getElementById('speechBubbleP1');
+    const bubble2 = document.getElementById('speechBubbleP2');
+
+    if (this.p1 && bubble1) {
+      if (this.p1.bubbleText && this.p1.bubbleTimer > 0) {
+        const screenPos = this.scene3D.toScreenPosition(
+          new THREE.Vector3(this.p1.pos.x, this.p1.pos.y + 3.2, 0)
+        );
+        bubble1.style.left = `${screenPos.x}px`;
+        bubble1.style.top = `${screenPos.y}px`;
+        bubble1.textContent = this.p1.bubbleText;
+        bubble1.classList.remove('hidden');
+      } else {
+        bubble1.classList.add('hidden');
+      }
+    }
+
+    if (this.p2 && bubble2) {
+      if (this.p2.bubbleText && this.p2.bubbleTimer > 0) {
+        const screenPos = this.scene3D.toScreenPosition(
+          new THREE.Vector3(this.p2.pos.x, this.p2.pos.y + 3.2, 0)
+        );
+        bubble2.style.left = `${screenPos.x}px`;
+        bubble2.style.top = `${screenPos.y}px`;
+        bubble2.textContent = this.p2.bubbleText;
+        bubble2.classList.remove('hidden');
+      } else {
+        bubble2.classList.add('hidden');
+      }
+    }
+  }
+
+  // --- COMBO HIT COUNTER ---
+  updateCombo() {
+    const comboEl = document.getElementById('hudCombo');
+    if (!comboEl) return;
+
+    if (this.p1 && this.p1.comboHits >= 2 && this.p1.comboTimer > 0) {
+      comboEl.textContent = `${this.p1.comboHits} HITS! 🔥`;
+      comboEl.classList.remove('hidden');
+    } else if (this.p2 && this.p2.comboHits >= 2 && this.p2.comboTimer > 0) {
+      comboEl.textContent = `${this.p2.comboHits} HITS! ⚡`;
+      comboEl.classList.remove('hidden');
+    } else {
+      comboEl.classList.add('hidden');
+    }
   }
 
   // --- MAIN LOOP ---
@@ -275,12 +354,15 @@ class GameApp3D {
 
       this.scene3D.updateCamera(this.p1.pos, this.p2.pos, this.superCinematic.active);
       this.updateHUD();
+      this.updateSpeechBubbles();
+      this.updateCombo();
     } else if (this.state === 'KO') {
       this.stateTimer -= delta;
       if (this.p1 && this.p2) {
-        this.p1.update(this.p2, delta * 0.4);
-        this.p2.update(this.p1, delta * 0.4);
+        this.p1.update(this.p2, delta);
+        this.p2.update(this.p1, delta);
         this.scene3D.updateCamera(this.p1.pos, this.p2.pos, true);
+        this.updateSpeechBubbles();
       }
       if (this.stateTimer <= 0) {
         this.showVictoryScreen();
@@ -318,17 +400,22 @@ class GameApp3D {
 
     document.getElementById('hudTimer').textContent = Math.ceil(this.matchTime);
 
-    // Super / Rage Status Indicator
+    // Shakti Super / Rage Status Indicator
     const p1SuperBadge = document.getElementById('hudP1SuperText');
     if (this.p1.rageTriggered && this.p1.superMeter >= 100) {
-      p1SuperBadge.textContent = '🔥 CRITICAL RAGE! PRESS SPACE / L!';
+      p1SuperBadge.textContent = '🔥 CRITICAL SHAKTI! PRESS SPACE / L!';
       p1SuperBadge.classList.add('glow');
     } else if (this.p1.superMeter >= 100) {
-      p1SuperBadge.textContent = '🔥 SUPER READY! (Space / L)';
+      p1SuperBadge.textContent = '🔥 SHAKTI READY! (Space / L)';
       p1SuperBadge.classList.add('glow');
     } else {
-      p1SuperBadge.textContent = `SUPER: ${Math.round(this.p1.superMeter)}%`;
+      p1SuperBadge.textContent = `SHAKTI: ${Math.round(this.p1.superMeter)}%`;
       p1SuperBadge.classList.remove('glow');
+    }
+
+    const p2SuperBadge = document.getElementById('hudP2SuperText');
+    if (p2SuperBadge) {
+      p2SuperBadge.textContent = this.p2.superMeter >= 100 ? 'SHAKTI 100%' : `SHAKTI: ${Math.round(this.p2.superMeter)}%`;
     }
   }
 
