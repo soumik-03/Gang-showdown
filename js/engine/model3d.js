@@ -154,40 +154,40 @@ class HumanoidFighter3D {
   // ===================================================================
   buildHumanoidBody() {
     const cfg = this.config.body || {};
-    // Palette selection
-    let skinCol = 0xf5d0b0; // Realistic warm skin tone
+    // Palette selection with rich, saturated tones
+    let skinCol = 0xf5c6a5; // Realistic warm brawler skin tone
     let clothCol1 = 0xe67e22; // Kurta / Shirt primary
-    let clothCol2 = 0xecf0f1; // Pajama / Pants secondary
+    let clothCol2 = 0xdcdde1; // Pajama / Pants secondary
     let shoeCol = 0x2c3e50;  // Leather shoes / sandals
     let hairCol = 0x2c3e50;  // Dark hair
 
     if (this.charId === 'detective') {
-      clothCol1 = 0x2e86de; // Blue coat
-      clothCol2 = 0xdcdde1; // Light slacks
-      shoeCol = 0x1e272e;
-      hairCol = 0x8395a7;
+      clothCol1 = 0x1e3799; // Navy blue trench coat
+      clothCol2 = 0x718093; // Charcoal tailored slacks
+      shoeCol = 0x192a56;   // Polished Oxford shoes
+      hairCol = 0x2f3640;   // Dark hair
     } else if (this.charId === 'wizard') {
-      clothCol1 = 0x1e3799; // Deep blue robe/kurta
-      clothCol2 = 0xf8efba; // Gold embroidered silk
-      shoeCol = 0x3c40c6;
-      hairCol = 0xffffff;
+      clothCol1 = 0x4834d4; // Arcane purple-blue velvet robe
+      clothCol2 = 0xf5f6fa; // Pure white silk dhoti
+      shoeCol = 0x30336b;
+      hairCol = 0xffffff;   // White hair and beard
     } else if (this.charId === 'explorer') {
-      clothCol1 = 0xd35400; // Safari orange vest
-      clothCol2 = 0xbdc3c7; // Utility pants
-      shoeCol = 0x7f8c8d;
-      hairCol = 0x2c3e50;
+      clothCol1 = 0xd35400; // Deep safari ochre vest
+      clothCol2 = 0x57606f; // Olive cargo pants
+      shoeCol = 0x4a3424;   // Leather hiking boots
+      hairCol = 0x3d2714;
     } else if (this.charId === 'golem') {
-      clothCol1 = 0x2f3640; // Heavy obsidian vest
-      clothCol2 = 0xc0392b; // Crimson wraps
-      shoeCol = 0x192a56;
-      hairCol = 0xe84118;
+      clothCol1 = 0x2f3542; // Volcanic basalt plate
+      clothCol2 = 0xeb4d4b; // Molten lava wraps
+      shoeCol = 0x1e272e;
+      hairCol = 0xff4757;   // Molten magma crest
     }
 
-    const skinMat = this.mat(skinCol, 0.65, 0.05);
-    const shirtMat = this.mat(clothCol1, 0.7, 0.05);
-    const pantsMat = this.mat(clothCol2, 0.75, 0.05);
-    const shoeMat = this.mat(shoeCol, 0.5, 0.2);
-    const hairMat = this.mat(hairCol, 0.85, 0.05);
+    const skinMat = this.mat(skinCol, 0.55, 0.05);
+    const shirtMat = this.mat(clothCol1, 0.6, 0.05);
+    const pantsMat = this.mat(clothCol2, 0.65, 0.05);
+    const shoeMat = this.mat(shoeCol, 0.45, 0.2);
+    const hairMat = this.mat(hairCol, 0.8, 0.05);
 
     // 1. Pelvis / Hips (Root of humanoid skeletal hierarchy at Y = 1.45)
     this.pelvis = new THREE.Group();
@@ -195,7 +195,7 @@ class HumanoidFighter3D {
     this.modelGroup.add(this.pelvis);
     this.joints.pelvis = this.pelvis;
 
-    // Pelvis cloth mesh
+    // Pelvis cloth mesh (pants waist)
     const pelvisMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.44, 0.35, 12), pantsMat);
     pelvisMesh.castShadow = true;
     pelvisMesh.receiveShadow = true;
@@ -208,7 +208,7 @@ class HumanoidFighter3D {
     this.pelvis.add(this.torso);
     this.joints.torso = this.torso;
 
-    // Kurta / Shirt Body
+    // Kurta / Coat Body
     const torsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.48, 0.85, 12), shirtMat);
     torsoMesh.position.y = 0.42;
     torsoMesh.castShadow = true;
@@ -216,7 +216,7 @@ class HumanoidFighter3D {
     this.torso.add(torsoMesh);
     this.meshParts.push(torsoMesh);
 
-    // Kurta Lapel / Collar detail
+    // Collar detail
     const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.12, 12), shirtMat);
     collar.position.y = 0.85;
     collar.castShadow = true;
@@ -241,33 +241,98 @@ class HumanoidFighter3D {
     this.joints.head = this.head;
 
     // 3D Human Head Geometry
-    const headSphere = new THREE.Mesh(new THREE.SphereGeometry(0.44, 16, 16), skinMat);
+    const headSphere = new THREE.Mesh(new THREE.SphereGeometry(0.44, 18, 18), skinMat);
     headSphere.scale.set(1.0, 1.15, 1.05);
     headSphere.castShadow = true;
     this.head.add(headSphere);
     this.meshParts.push(headSphere);
 
-    // Expressive Photo-Texture Face Plane (maps character avatar or friend photo!)
+    // Expressive Photo-Texture Face Disc (wraps cleanly over head without cutting in)
     if (this.config.avatar) {
       const texLoader = new THREE.TextureLoader();
       texLoader.load(this.config.avatar, (tex) => {
+        tex.generateMipmaps = true;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
         const faceMat = new THREE.MeshBasicMaterial({
           map: tex,
-          transparent: true
+          transparent: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2
         });
-        const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.68), faceMat);
-        facePlane.position.set(0, 0.04, 0.45);
-        this.head.add(facePlane);
+        const faceDisc = new THREE.Mesh(new THREE.CircleGeometry(0.38, 32), faceMat);
+        faceDisc.position.set(0, 0.05, 0.47);
+        this.head.add(faceDisc);
       });
     }
 
-    // Stylized Hair / Cap
-    const hairMesh = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 14), hairMat);
-    hairMesh.position.set(0, 0.12, -0.05);
-    hairMesh.scale.set(1.02, 0.8, 1.05);
-    hairMesh.castShadow = true;
-    this.head.add(hairMesh);
-    this.meshParts.push(hairMesh);
+    // Character-Specific 3D Hats, Hair & Accessories
+    if (this.charId === 'detective') {
+      // Fedora Hat
+      const fedoraGroup = new THREE.Group();
+      fedoraGroup.position.set(0, 0.38, 0);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.68, 0.04, 16), this.mat(0x2f3640, 0.8, 0.1));
+      brim.rotation.x = 0.08;
+      fedoraGroup.add(brim);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.35, 14), this.mat(0x2f3640, 0.8, 0.1));
+      crown.position.set(0, 0.18, 0);
+      crown.scale.set(1.0, 1.0, 1.15);
+      fedoraGroup.add(crown);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.08, 14), this.mat(0x00d2d3, 0.5, 0.2));
+      band.position.set(0, 0.08, 0);
+      fedoraGroup.add(band);
+      this.head.add(fedoraGroup);
+      this.meshParts.push(brim, crown, band);
+    } else if (this.charId === 'wizard') {
+      // Pointed Wizard Hat
+      const hatGroup = new THREE.Group();
+      hatGroup.position.set(0, 0.36, 0);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.04, 16), this.mat(0x1e272e, 0.75, 0.1));
+      hatGroup.add(brim);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.85, 14), this.mat(0x3742fa, 0.75, 0.1));
+      cone.position.set(0, 0.42, -0.05);
+      cone.rotation.x = -0.12;
+      hatGroup.add(cone);
+      this.head.add(hatGroup);
+      this.meshParts.push(brim, cone);
+
+      // Flowing 3D White Beard
+      const beard = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.5, 10), this.mat(0xf1f2f6, 0.9, 0.05));
+      beard.rotation.x = Math.PI - 0.2;
+      beard.position.set(0, -0.32, 0.28);
+      this.head.add(beard);
+      this.meshParts.push(beard);
+    } else if (this.charId === 'explorer') {
+      // Safari Sun Hat
+      const hatGroup = new THREE.Group();
+      hatGroup.position.set(0, 0.36, 0);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.04, 16), this.mat(0xf39c12, 0.75, 0.1));
+      hatGroup.add(brim);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.3, 14), this.mat(0xe67e22, 0.75, 0.1));
+      crown.position.set(0, 0.16, 0);
+      hatGroup.add(crown);
+      this.head.add(hatGroup);
+      this.meshParts.push(brim, crown);
+    } else if (this.charId === 'golem') {
+      // Magma Horn Crest
+      const horn1 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.42, 8), this.mat(0xeb2f06, 0.6, 0.2));
+      horn1.position.set(0.28, 0.48, 0.1);
+      horn1.rotation.z = -0.35;
+      const horn2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.42, 8), this.mat(0xeb2f06, 0.6, 0.2));
+      horn2.position.set(-0.28, 0.48, 0.1);
+      horn2.rotation.z = 0.35;
+      this.head.add(horn1, horn2);
+      this.meshParts.push(horn1, horn2);
+    } else {
+      // Default Stylized Hair
+      const hairMesh = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 14), hairMat);
+      hairMesh.position.set(0, 0.12, -0.05);
+      hairMesh.scale.set(1.02, 0.8, 1.05);
+      hairMesh.castShadow = true;
+      this.head.add(hairMesh);
+      this.meshParts.push(hairMesh);
+    }
 
     // 4. Arms & Hands (Left & Right)
     this.buildArm(1, shirtMat, skinMat);  // Right Arm (X > 0)
@@ -410,8 +475,8 @@ class HumanoidFighter3D {
     if (this.attackSpark) this.attackSpark.visible = false;
     if (this.superAura) this.superAura.visible = false;
 
-    // Base facing orientation: turned towards opponent with a slight perspective angle
-    const baseFacingY = facing === 1 ? (Math.PI / 2 - 0.22) : (-Math.PI / 2 + 0.22);
+    // Base facing orientation: 3/4 perspective angle towards camera and opponent (FightKaro style)
+    const baseFacingY = facing === 1 ? (Math.PI * 0.28) : (-Math.PI * 0.28);
     this.modelGroup.rotation.y = baseFacingY;
 
     // Target transforms for joints
@@ -444,9 +509,10 @@ class HumanoidFighter3D {
       const breath = Math.sin(this.animTime * 4.8);
       pelvisY = 1.45 + breath * 0.05;
 
-      // Fighting stance torso angle
-      torsoRot.y = isFwdLeadL ? 0.35 : -0.35;
+      // Fighting stance torso angle & head angled towards screen
+      torsoRot.y = isFwdLeadL ? 0.25 : -0.25;
       torsoRot.x = 0.05;
+      headRot.y = isFwdLeadL ? -0.22 : 0.22;
 
       // Both fists up in tight boxing guard, elbows bent ~90°, rhythmic bobbing
       if (isFwdLeadL) {

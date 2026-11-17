@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Gang Showdown 3D - The Arena Brawler</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥊</text></svg>">
 </head>
 <body>
@@ -96,7 +96,15 @@
         <!-- Center Match Timer -->
         <div class="hud-center-cluster">
           <div id="hudTimer" class="hud-timer-circle">60</div>
-          <div class="hud-pause-pill">||</div>
+          <div class="hud-center-controls">
+            <button id="btnPause" class="hud-pause-pill" onclick="window.gameInstance && window.gameInstance.togglePause()">||</button>
+            <button id="btnSoundInHUD" class="hud-pause-pill" onclick="
+              const isMuted = window.soundEngine.toggleMute();
+              this.textContent = isMuted ? '🔇' : '🔊';
+              const topMute = document.getElementById('btnMute');
+              if (topMute) topMute.textContent = isMuted ? '🔇 SOUND OFF' : '🔊 SOUND ON';
+            ">🔊</button>
+          </div>
         </div>
 
         <!-- Player 2 Status -->
@@ -186,16 +194,16 @@
     </div>
   </div>
 
-  <!-- 3D Engine & Scripts -->
-  <script src="js/libs/three.min.js"></script>
-  <script src="js/characters.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/engine/input.js"></script>
-  <script src="js/engine/model3d.js"></script>
-  <script src="js/engine/scene3d.js"></script>
-  <script src="js/engine/ai.js"></script>
-  <script src="js/engine/fighter.js"></script>
-  <script src="js/game.js"></script>
+  <!-- 3D Engine & Scripts (v=2.2 cache-busting) -->
+  <script src="js/libs/three.min.js?v=2.2"></script>
+  <script src="js/characters.js?v=2.2"></script>
+  <script src="js/audio.js?v=2.2"></script>
+  <script src="js/engine/input.js?v=2.2"></script>
+  <script src="js/engine/model3d.js?v=2.2"></script>
+  <script src="js/engine/scene3d.js?v=2.2"></script>
+  <script src="js/engine/ai.js?v=2.2"></script>
+  <script src="js/engine/fighter.js?v=2.2"></script>
+  <script src="js/game.js?v=2.2"></script>
 
 </body>
 </html>

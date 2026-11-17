@@ -37,7 +37,8 @@ class InputController {
 
   initKeyboard() {
     window.addEventListener('keydown', (e) => {
-      this.keys[e.code] = true;
+      if (e.code) this.keys[e.code] = true;
+      if (e.key) this.keys[e.key.toLowerCase()] = true;
       this.updateState();
 
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
@@ -46,33 +47,38 @@ class InputController {
     });
 
     window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
+      if (e.code) this.keys[e.code] = false;
+      if (e.key) this.keys[e.key.toLowerCase()] = false;
       this.updateState();
     });
   }
 
-  updateState() {
-    // Player 1: WASD + J (Punch), K (Kick), I (Grab), L / Space (Super)
-    this.p1.left = !!(this.keys['KeyA'] || this.keys['ArrowLeft']);
-    this.p1.right = !!(this.keys['KeyD'] || this.keys['ArrowRight']);
-    this.p1.up = !!(this.keys['KeyW'] || this.keys['ArrowUp']);
-    this.p1.down = !!(this.keys['KeyS'] || this.keys['ArrowDown']);
+  isDown(code, char) {
+    return !!(this.keys[code] || (char && this.keys[char.toLowerCase()]));
+  }
 
-    this.p1.punch = !!this.keys['KeyJ'];
-    this.p1.kick = !!this.keys['KeyK'];
-    this.p1.grab = !!(this.keys['KeyI'] || (this.keys['KeyJ'] && this.keys['KeyK']));
-    this.p1.super = !!(this.keys['KeyL'] || this.keys['Space']);
-    this.p1.block = !!this.keys['KeyH'];
+  updateState() {
+    // Player 1: WASD or Arrow keys + (J/Z Punch), (K/X Kick), (I/C Grab), (H/V Block), (Space/L Super)
+    this.p1.left = this.isDown('KeyA', 'a') || this.isDown('ArrowLeft');
+    this.p1.right = this.isDown('KeyD', 'd') || this.isDown('ArrowRight');
+    this.p1.up = this.isDown('KeyW', 'w') || this.isDown('ArrowUp');
+    this.p1.down = this.isDown('KeyS', 's') || this.isDown('ArrowDown');
+
+    this.p1.punch = this.isDown('KeyJ', 'j') || this.isDown('KeyZ', 'z') || this.isDown('KeyF', 'f') || this.isDown('KeyU', 'u');
+    this.p1.kick = this.isDown('KeyK', 'k') || this.isDown('KeyX', 'x');
+    this.p1.grab = this.isDown('KeyI', 'i') || this.isDown('KeyC', 'c') || (this.p1.punch && this.p1.kick);
+    this.p1.super = this.isDown('KeyL', 'l') || this.isDown('Space') || this.isDown('KeyQ', 'q') || this.isDown('KeyE', 'e');
+    this.p1.block = this.isDown('KeyH', 'h') || this.isDown('KeyV', 'v') || this.isDown('KeyB', 'b');
 
     // Player 2 (Local 2P Keyboard)
-    this.p2.left = !!this.keys['Numpad4'];
-    this.p2.right = !!this.keys['Numpad6'];
-    this.p2.up = !!this.keys['Numpad8'];
-    this.p2.down = !!this.keys['Numpad5'];
-    this.p2.punch = !!this.keys['Numpad1'];
-    this.p2.kick = !!this.keys['Numpad2'];
-    this.p2.grab = !!this.keys['Numpad3'];
-    this.p2.super = !!this.keys['Numpad0'];
+    this.p2.left = this.isDown('Numpad4') || this.isDown('KeyJ', 'j');
+    this.p2.right = this.isDown('Numpad6') || this.isDown('KeyL', 'l');
+    this.p2.up = this.isDown('Numpad8') || this.isDown('KeyI', 'i');
+    this.p2.down = this.isDown('Numpad5') || this.isDown('KeyK', 'k');
+    this.p2.punch = this.isDown('Numpad1');
+    this.p2.kick = this.isDown('Numpad2');
+    this.p2.grab = this.isDown('Numpad3');
+    this.p2.super = this.isDown('Numpad0');
   }
 
   bindTouchButton(elementId, actionName, player = 'p1') {

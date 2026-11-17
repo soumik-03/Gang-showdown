@@ -19,6 +19,7 @@ class GameApp3D {
     this.scene3D = new GameScene3D(this.container);
 
     this.state = 'TITLE'; // TITLE, SELECT, FIGHT, KO, VICTORY
+    this.isPaused = false;
 
     // Selection Data
     this.activeSelectSlot = 'p1';
@@ -151,11 +152,15 @@ class GameApp3D {
   }
 
   startFight() {
+    this.isPaused = false;
     document.getElementById('screenTitle').classList.add('hidden');
     document.getElementById('screenSelect').classList.add('hidden');
     document.getElementById('screenVictory').classList.add('hidden');
     document.getElementById('mobileControls').classList.remove('hidden');
     document.getElementById('gameHUD').classList.remove('hidden');
+
+    const topControls = document.querySelector('.top-controls');
+    if (topControls) topControls.classList.add('hidden');
 
     const koOverlay = document.getElementById('koOverlayText');
     if (koOverlay) koOverlay.classList.add('hidden');
@@ -235,13 +240,25 @@ class GameApp3D {
     }
   }
 
+  togglePause() {
+    if (this.state === 'FIGHT') {
+      this.isPaused = !this.isPaused;
+      const pauseBtn = document.getElementById('btnPause');
+      if (pauseBtn) pauseBtn.textContent = this.isPaused ? '▶' : '||';
+    }
+  }
+
   showVictoryScreen() {
     this.state = 'VICTORY';
+    this.isPaused = false;
     if (window.soundEngine) window.soundEngine.stopBGM();
 
     document.getElementById('screenVictory').classList.remove('hidden');
     document.getElementById('mobileControls').classList.add('hidden');
     document.getElementById('gameHUD').classList.add('hidden');
+
+    const topControls = document.querySelector('.top-controls');
+    if (topControls) topControls.classList.remove('hidden');
 
     document.getElementById('vicWinnerTitle').textContent = `🏆 ${this.winner.name} WINS! 🏆`;
     document.getElementById('vicQuote').textContent = `"${this.winner.config.quotes.win}"`;
@@ -303,6 +320,10 @@ class GameApp3D {
     const delta = Math.min(this.clock.getDelta(), 0.05);
 
     if (this.state === 'FIGHT') {
+      if (this.isPaused) {
+        this.scene3D.render();
+        return;
+      }
       if (!this.superCinematic.active) {
         this.matchTime -= delta;
         if (this.matchTime <= 0) {

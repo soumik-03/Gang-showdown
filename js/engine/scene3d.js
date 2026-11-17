@@ -39,7 +39,7 @@ class GameScene3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 0.95;
     this.container.appendChild(this.renderer.domElement);
 
     this.cameraShake = 0;
@@ -59,12 +59,12 @@ class GameScene3D {
   }
 
   setupLighting() {
-    // Ambient Light (Warm festive glow)
-    const ambient = new THREE.AmbientLight(0xfff0e6, 0.65);
+    // Ambient Light (Warm festive twilight glow)
+    const ambient = new THREE.AmbientLight(0xffecd2, 0.45);
     this.scene.add(ambient);
 
-    // Key Overhead Light (Casts soft directional human shadows)
-    this.mainLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+    // Key Overhead Light (Casts crisp directional human shadows)
+    this.mainLight = new THREE.DirectionalLight(0xfff5e6, 0.95);
     this.mainLight.position.set(4, 16, 9);
     this.mainLight.castShadow = true;
     this.mainLight.shadow.mapSize.width = 2048;
@@ -79,7 +79,7 @@ class GameScene3D {
     this.scene.add(this.mainLight);
 
     // Atmospheric Backlight / Rim
-    const rimLight = new THREE.DirectionalLight(0xf368e0, 0.7);
+    const rimLight = new THREE.DirectionalLight(0x9b59b6, 0.35);
     rimLight.position.set(-6, 9, -9);
     this.scene.add(rimLight);
   }
@@ -92,7 +92,7 @@ class GameScene3D {
     const stageDepth = 12;
     const stageThickness = 0.6;
 
-    // 1. Checkered Sandstone Floor Texture
+    // 1. Checkered Sandstone Floor Texture (Warm Terracotta & Sandstone)
     const floorCanvas = document.createElement('canvas');
     floorCanvas.width = 512;
     floorCanvas.height = 512;
@@ -100,10 +100,10 @@ class GameScene3D {
     const tileSize = 64;
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
-        fctx.fillStyle = (r + c) % 2 === 0 ? '#e0d5c1' : '#c7b299';
+        fctx.fillStyle = (r + c) % 2 === 0 ? '#d4a373' : '#b08968';
         fctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
-        // Subtle tile seam border
-        fctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+        // Sandstone tile grout seam
+        fctx.strokeStyle = 'rgba(74, 44, 23, 0.3)';
         fctx.lineWidth = 2;
         fctx.strokeRect(c * tileSize, r * tileSize, tileSize, tileSize);
       }
@@ -116,7 +116,7 @@ class GameScene3D {
     const platformMat = new THREE.MeshStandardMaterial({
       map: floorTexture,
       roughness: 0.65,
-      metalness: 0.1
+      metalness: 0.05
     });
 
     this.platform = new THREE.Mesh(
@@ -158,56 +158,70 @@ class GameScene3D {
     const cx = 512;
     const cy = 512;
 
-    // Draw concentric festive floral rings
-    const drawFlowerRing = (radius, numPetals, petalLength, color, strokeColor) => {
-      ctx.fillStyle = color;
-      ctx.strokeStyle = strokeColor || '#ffffff';
-      ctx.lineWidth = 4;
-      for (let i = 0; i < numPetals; i++) {
-        const angle = (i * 2 * Math.PI) / numPetals;
-        const px = cx + Math.cos(angle) * radius;
-        const py = cy + Math.sin(angle) * radius;
-        ctx.beginPath();
-        ctx.arc(px, py, petalLength, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+    // Draw authentic layered star/lotus pointed petals
+    const drawStarRing = (outerR, innerR, points, fillCol, strokeCol) => {
+      ctx.fillStyle = fillCol;
+      ctx.strokeStyle = strokeCol || '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const angle = (i * Math.PI) / points;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     };
 
-    // Outer decorative scallops (Golden Yellow)
-    drawFlowerRing(380, 24, 75, '#f1c40f', '#f39c12');
-    // Second ring (Vivid Royal Blue)
-    drawFlowerRing(300, 20, 65, '#2980b9', '#1abc9c');
-    // Third ring (Hot Magenta / Pink)
-    drawFlowerRing(220, 16, 55, '#e84393', '#fd79a8');
-    // Fourth ring (Bright Spring Green)
-    drawFlowerRing(140, 12, 45, '#2ecc71', '#27ae60');
+    // Layer 1: Outermost Golden Saffron Star Rim (radius 480)
+    drawStarRing(480, 420, 24, '#f1c40f', '#f39c12');
 
-    // Central Sun / Lotus Disc
+    // Layer 2: Deep Royal Blue Layer
+    drawStarRing(410, 350, 20, '#2980b9', '#1b6497');
+
+    // Layer 3: Hot Magenta / Crimson Layer
+    drawStarRing(340, 280, 16, '#e84118', '#c23616');
+
+    // Layer 4: Peacock Emerald Green
+    drawStarRing(270, 210, 14, '#20bf6b', '#0fb9b1');
+
+    // Layer 5: Saffron Orange Layer
+    drawStarRing(200, 150, 12, '#fa8231', '#f7b731');
+
+    // Central Multi-layered Sun Disc
     ctx.beginPath();
-    ctx.arc(cx, cy, 90, 0, Math.PI * 2);
-    ctx.fillStyle = '#e67e22';
+    ctx.arc(cx, cy, 140, 0, Math.PI * 2);
+    ctx.fillStyle = '#eb3b5a';
     ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#f1c40f';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#fed330';
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, 45, 0, Math.PI * 2);
-    ctx.fillStyle = '#f39c12';
+    ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+    ctx.fillStyle = '#fed330';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 50, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
 
     const mandalaTex = new THREE.CanvasTexture(canvas);
-    const mandalaGeo = new THREE.PlaneGeometry(9.5, 9.5);
+    const mandalaGeo = new THREE.PlaneGeometry(10.5, 10.5);
     const mandalaMat = new THREE.MeshBasicMaterial({
       map: mandalaTex,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.95,
       depthWrite: false
     });
     const mandalaMesh = new THREE.Mesh(mandalaGeo, mandalaMat);
     mandalaMesh.rotation.x = -Math.PI / 2;
-    mandalaMesh.position.set(0, 0.02, 0);
+    mandalaMesh.position.set(0, 0.025, 0);
     this.scene.add(mandalaMesh);
   }
 

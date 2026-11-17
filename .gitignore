@@ -1,2 +1,4 @@
 scripts/video_frames/
+scripts/*.py
+scripts/*.png
 *.log
